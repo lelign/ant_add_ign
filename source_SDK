@@ -1,11 +1,13 @@
 # for 508
 . /opt/poky/2.4.4/environment-setup-armv7ahf-neon-poky-linux-gnueabi
+
+
 # for 5161
 . /opt/poky/5.2.4/environment-setup-cortexa9t2hf-neon-poky-linux-gnueabi
 #
 
+cd ..; rm -rf build; mkdir build && cd build; cmake ..; make -j $(nproc)
 
-. /opt/poky/5.2.4/environment-setup-cortexa9t2hf-neon-poky-linux-gnueabi
 
 cd build; cmake ..; make -j $(nproc)
 cmake ..; make -j $(nproc)

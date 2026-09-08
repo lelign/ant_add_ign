@@ -1,0 +1,170 @@
+#include "socfpga_cyclone5.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	model = "Profitt PBX-MTV-508";
+	compatible = "altr,socfpga-cyclone5", "altr,socfpga";
+	
+	chosen {
+		bootargs = "earlyprintk cma=64M";
+		stdout-path = "serial0:115200n8";
+	};
+
+	leds {
+	        compatible = "gpio-leds";
+	        sys {
+		        label = "system";
+		        gpios = <&portb 11 GPIO_ACTIVE_LOW>;
+		        linux,default-trigger = "heartbeat";
+	        };
+	        m26 {
+		        label = "m26";
+		        gpios = <&portb 12 GPIO_ACTIVE_LOW>;
+	        };
+	};
+
+	soc {
+		strmem {
+                        compatible = "pfrt,str-mem";
+                        
+						/*0xFF202780 <= физический адрес (регистр) устройства в адресном пространстве процессора
+						0x80: Размер (длина) диапазона адресов, занимаемого этим устройством. В данном случае это 128 байт в десятичной системе.
+						Данная запись обычно встречается в файлах Device Tree (DTS/DTB), используемых в ядре Linux для описания аппаратного обеспечения.
+Запись reg = <0xFF202780 0x80> означает следующее:
+
+* 0xFF202780: Базовый физический адрес (регистр) устройства в адресном пространстве процессора.
+* 0x80: Размер (длина) диапазона адресов, занимаемого этим устройством. В данном случае это 128 байт в десятичной системе.
+
+## Контекст (Intel/Altera SoC FPGA)
+Этот конкретный адрес (0xFF200000 и выше) характерен для систем на кристалле Intel (Altera) Cyclone V SoC или Arria 10.
+
+* Адрес находится в области Lightweight HPS-to-FPGA Bridge (LW HPS2FPGA).
+* Смещение 0x2780 внутри этого моста обычно соответствует периферийному IP-блоку, созданному пользователем в Platform Designer (Qsys), например, контроллеру PIO (Parallel I/O), таймеру или пользовательскому регистру управления.
+
+Как это используется в коде:
+Когда драйвер Linux загружается, он считывает эти значения, чтобы отобразить (mmap) физический адрес в виртуальное пространство памяти, позволяя программе управлять аппаратной частью через этот диапазон.
+Хотите узнать, как обратиться к этому адресу из программы на C или как изменить его в Qsys?
+
+*/
+				reg =   <0xFF202780 0x80>, // REG_HDMI_OUT
+				<0xFF20b900 0x80>, // REG_MOSAIC
+				<0xFF20b000 0x80>, // REG_FRAMEBUFFER_0
+				<0xFF20b100 0x80>, // REG_FRAMEBUFFER_1
+				<0xFF20b200 0x80>, // REG_FRAMEBUFFER_2
+				<0xFF20b300 0x80>, // REG_FRAMEBUFFER_3
+				<0xFF20b400 0x80>, // REG_FRAMEBUFFER_4
+				<0xFF20b500 0x80>, // REG_FRAMEBUFFER_5
+				<0xFF20b600 0x80>, // REG_FRAMEBUFFER_6
+				<0xFF20b700 0x80>, // REG_FRAMEBUFFER_7
+				<0xFF209000 0x80>, // REG_SDI_ADAPTER
+				<0xFF208000 0x80>, // REG_CVI_0
+				<0xFF208080 0x80>, // REG_SCALER_0
+				<0xFF208200 0x80>, // REG_CVI_1
+				<0xFF208280 0x80>, // REG_SCALER_1 
+				<0xFF208400 0x80>, // REG_CVI_2
+				<0xFF208480 0x80>, // REG_SCALER_2
+				<0xFF208600 0x80>, // REG_CVI_3
+				<0xFF208680 0x80>, // REG_SCALER_3
+				<0xFF208800 0x80>, // REG_CVI_4
+				<0xFF208880 0x80>, // REG_SCALER_4
+				<0xFF208a00 0x80>, // REG_CVI_5
+				<0xFF208a80 0x80>, // REG_SCALER_5
+				<0xFF208c00 0x80>, // REG_CVI_6
+				<0xFF208c80 0x80>, // REG_SCALER_6
+				<0xFF208e00 0x80>, // REG_CVI_7
+				<0xFF208e80 0x80>, // REG_SCALER_7
+				<0xFF203000 0x80>, // REG_BUILDID
+				<0xFF20b980 0x80>, // REG_BARS
+				<0xFF20e100 0x80>, // REG_AUDIO_SELECTOR
+				<0xFF208100 0x80>, // REG_MOTION_0
+				<0xFF208300 0x80>, // REG_MOTION_1
+				<0xFF208500 0x80>, // REG_MOTION_2
+				<0xFF208700 0x80>, // REG_MOTION_3
+				<0xFF208900 0x80>, // REG_MOTION_4s
+				<0xFF208B00 0x80>, // REG_MOTION_5
+				<0xFF208D00 0x80>, // REG_MOTION_6
+				<0xFF208F00 0x80>, // REG_MOTION_7
+				<0xFF20b800 0x80>, // REG_DEI
+				<0xFF20b880 0x80> // REG_SDI_CVO
+			;
+
+                };
+                overlay@0xFF202880 {
+                        compatible = "pfrt,overlay";
+                        reg = <0xFF202880 0x0030>;
+			interrupts = <0x0 0x28 0x4>;
+                };
+                tsin2@0xFF209840 {
+                        compatible = "pfrt,tsin";
+                        reg = <0xFF204880 0x0040>;
+			interrupts = <0x0 0x29 0x4>;
+			index = <1>;
+			buf_size = <2048>;
+                };
+        };
+
+};
+
+&mmc0 {
+};
+
+&uart0 {
+	status = "okay";
+};
+
+
+&usb1 {
+	status = "okay";
+	dr_mode = "host";
+};
+
+&gpio0 {
+	status = "okay";
+};
+
+&gpio1 {
+	status = "okay";
+};
+
+&gmac1 {
+	status = "okay";
+	snps,reset-gpio = <&portb 6 0>;
+	snps,reset-active-low;
+};
+
+&i2c0 {
+        status = "okay";
+        ina219@40 {
+                compatible = "ti,ina219";
+                reg = <0x40>;
+                shunt-resistor = <55000>;
+        };
+        lm75@48 {
+                reg = <0x48>;
+                compatible = "national,lm75b";
+        };
+	bq32000: rtc@68 {
+                compatible = "ti,bq32000";
+                trickle-resistor-ohms = <1120>;
+                reg = <0x68>;
+        };
+        pca9555: pca9555@20 {
+		compatible = "nxp,pca9555";
+		gpio-controller;
+		#gpio-cells = <2>;
+		reg = <0x20>;
+	};
+	pca9555_2: pca9555@21 {
+		compatible = "nxp,pca9555";
+		gpio-controller;
+		#gpio-cells = <2>;
+		reg = <0x21>;
+	};
+};
+
+&porta {
+};
+
+&portb {
+
+};

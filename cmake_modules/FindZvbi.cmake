@@ -1,0 +1,3 @@
+find_path(ZVBI_INCLUDE_DIR libzvbi.h)
+find_library(ZVBI_LIBRARY zvbi)
+find_package_handle_standard_args(Zvbi DEFAULT_MSG ZVBI_INCLUDE_DIR ZVBI_LIBRARY)

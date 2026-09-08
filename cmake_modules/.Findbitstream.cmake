@@ -1,0 +1,2 @@
+find_path(LIBBITSTREAM_INCLUDE_DIR bitstream/common.h)
+find_package_handle_standard_args(bitstream DEFAULT_MSG LIBBITSTREAM_INCLUDE_DIR)

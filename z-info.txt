@@ -1,0 +1,210 @@
+
+
+# prepare
+cd /media/ignat/537GB/a_h/pbx-mtv-508-software-build
+
+rm -rf ./*
+
+#source
+. /opt/poky/2.4.4/environment-setup-armv7ahf-neon-poky-linux-gnueabi
+
+cmake -DCMAKE_BUILD_TYPE=Debug ../pbx-mtv-508-software
+
+make -j $(nproc)
+
+
+
+# ignore changes & back
+git stash / git stash pop
+
+git log --oneline
+    cbebc54 (HEAD -> main, origin/main) ready to use
+    93737dc ready to use
+    dfefe65 bitstream off
+    f4af88e deleted libusb
+    6aedb1f turned  m26 off completely
+    d14d73c mb86m26_control set off
+    3e4bedf it's work
+    1f3dfd5 deleted hls-server
+    4f4666d now m26-eeprom not in build
+    d693a3d pbx-mtv-508.cpp check ok
+    d4b67be added dts
+    27a4638 first fix
+    7bbdc13 first commit
+
+git checkout 4f4666d
+
+    yellow = "\033[33m";
+    green = "\033[32m";
+    magenta = "\035[32m";
+    off = "\033[0m";
+
+
+
+layout
+qDebug(category) << "\033[32m" << "\t\tpreset_Layout_Read" << layout_preset.name[0] << "\033[0m";
+
+/usr/bin/pbx-mtv-508 --w <= Watchdog enabled
+
+
+
+
+
+
+
+/dev/watchdog
+/dev/tsin1
+/dev/str-mem (mtv-system)
+REG_DEI
+
+
+REG_BARS
+
+    bars_mute() => reg_write(REG_BARS, 16, reg) 
+    работает постоянно
+        16  1111111111000011 <= 2 & 3 inputs exist 
+        16  1111001111111111 <= 6 input exist
+        16  1111111111111111 <= no one inputs or 8 input
+
+        ???
+        reg = 0; <= не происходит сброс значений зеленого градусника на входе с отсутсвующим сиггналом
+
+    bars_configure (int index, int x, int x2, int y, int scale, int enable_1, int enable_2) => reg_write(REG_BARS, 16, reg)
+    при включении, при изменении статуса
+    index=0 x=7 x2=608 y=27(/2) scale=4 en_1=1 en_2=1
+        1 "0" 		 "101000000000110100000000111"
+                      e <s>   <---27-><----7----> 
+        2 "1" 		 "101000000000110101001100000"
+                      e <s>   <---27-><---608--->
+    index=1 x=647 x2=1248 y=27 scale=4 en_1=1 en_2=1
+        1 "10" 		 "101000000000110101010000111"
+                              <---27-><---647---> 
+        2 "11" 		 "101000000000110110011100000"
+                              <---27-><--1248--->
+
+    index=2 x=1287 x2=1888 y=27 scale=4 en_1=1 en_2=1
+        1 "100" 	 "101000000000110110100000111"
+                              <---27-><--1287--->         
+        2 "101" 	 "101000000000110111101100000"
+                              <---27-><--1888---> 
+
+    index=3 x=7 x2=608 y=387 scale=4 en_1=1 en_2=1
+        1 "110" 	 "101000001100000100000000111"  
+                              <---387><----7---->
+        2 "111" 	 "101000001100000101001100000"
+                              <---387><---608--->
+
+    get_audio_level() <= read
+
+    so
+        addr from 0 to 15 bars_configure()
+        16 bars_mute()
+    
+
+                                            input 1 sign exist
+ mtv-system: reg_write | REG_MOSAIC         |  16 |     369280 | 00000000000001011010001010000000 
+ mtv-system: reg_write | REG_MOSAIC         |  17 |    4194304 | 00000000010000000000000000000000 pos 3X3 1
+ mtv-system: reg_write | REG_MOSAIC         |  16 |     369920 | 00000000000001011010010100000000           +640
+ mtv-system: reg_write | REG_MOSAIC         |  17 |    4194944 | 00000000010000000000001010000000 pos 3X3 2
+ mtv-system: reg_write | REG_MOSAIC         |  16 |     370560 | 00000000000001011010011110000000           +640
+ mtv-system: reg_write | REG_MOSAIC         |  17 |    4195584 | 00000000010000000000010100000000 pos 3X3 3
+ mtv-system: reg_write | REG_MOSAIC         |  16 |     737920 | 00000000000010110100001010000000
+ mtv-system: reg_write | REG_MOSAIC         |  17 |    4562944 | 00000000010001011010000000000000 pos 3X3 4
+ mtv-system: reg_write | REG_MOSAIC         |  16 |     738560 | 00000000000010110100010100000000           +640
+ mtv-system: reg_write | REG_MOSAIC         |  17 |    4563584 | 00000000010001011010001010000000 pos 3X3 5
+
+ mtv-system: reg_write | REG_MOSAIC         |  16 |     370560 | 00000000000001011010011110000000
+ mtv-system: reg_write | REG_MOSAIC         |  17 |    4195584 | 00000000010000000000010100000000 input 1 sign exist pos 3X3 3
+
+ mtv-system: reg_write | REG_MOSAIC         |  18 |     369920 | 00000000000001011010010100000000 input 2
+ mtv-system: reg_write | REG_MOSAIC         |  19 |    4194944 | 00000000010000000000001010000000 input 2 no sign
+ mtv-system: reg_write | REG_MOSAIC         |  20 |    1106560 | 00000000000100001110001010000000 input 3 no sign
+ mtv-system: reg_write | REG_MOSAIC         |  21 |    4931584 | 00000000010010110100000000000000 input 3 no sign
+
+ mtv-system: reg_write | REG_MOSAIC         |  22 |     369280 | 00000000000001011010001010000000
+ mtv-system: reg_write | REG_MOSAIC         |  23 |          0 | 00000000000000000000000000000000
+ mtv-system: reg_write | REG_MOSAIC         |  22 |     369280 | 00000000000001011010001010000000
+ mtv-system: reg_write | REG_MOSAIC         |  23 |          0 | 00000000000000000000000000000000
+
+
+ mtv-system: reg_write | REG_MOSAIC         |  24 |     369280 | 00000000000001011010001010000000
+ mtv-system: reg_write | REG_MOSAIC         |  25 |          0 | 00000000000000000000000000000000
+ mtv-system: reg_write | REG_MOSAIC         |  26 |     369280 | 00000000000001011010001010000000
+ mtv-system: reg_write | REG_MOSAIC         |  27 |          0 | 00000000000000000000000000000000
+ mtv-system: reg_write | REG_MOSAIC         |  28 |     369280 | 00000000000001011010001010000000
+ mtv-system: reg_write | REG_MOSAIC         |  29 |          0 | 00000000000000000000000000000000  
+
+ mtv-system: reg_write | REG_MOSAIC         |  30 |    1107840 | 00000000000100001110011110000000 input 8
+ mtv-system: reg_write | REG_MOSAIC         |  31 |    4932864 | 00000000010010110100010100000000 input 8 sign exist
+
+
+clock over /dev/mtv-overlay
+in dts
+    overlay@0xFF202880 {
+                        compatible = "pfrt,overlay";
+                        reg = <0xFF202880 0x0030>;
+			interrupts = <0x0 0x28 0x4>;
+                }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ int main() {
+    try {
+
+        static QLoggingCategory category("\033[35m read_mem\033[0m");
+        
+//static constexpr size_t REG_SPAN = 0x80;
+        QTextStream qin(stdin);
+        QTextStream qout(stdout);
+        qout << "Enter REG: ";
+        qout.flush();
+        QString line = qin.readLine();
+        bool ok = false;
+        
+        if(reglist.contains(line)){
+            ok = true;
+            qDebug(category) << "reglist.contains" << line;
+        }
+        
+        uintptr_t REG_BASE; // = 0xFF202780;
+        REG_BASE = static_cast<uintptr_t>(line.toULongLong(&ok, 0)); // >> REG_BASE;
+
+        if (ok) {
+            qDebug(category) << "line" << line << REG_BASE;
+        // Success: 'address' contains the value
+        } else {
+        // Handling error: Conversion failed
+        }
+        
+        // here stop
+        FPGAConfig fpga;
+        
+        // Читаем значение
+        uint32_t data = fpga.read(REG_BASE);
+        //qDebug(category) << "1 Read value: 0x" << std::hex << data;
+        qDebug(category) << "2 Read value: 0x" << data << QString::number(data,2);
+
+        // Записываем значение
+        // fpga.write(0x1);
+        
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
+    return 0;
+}
+
+
+

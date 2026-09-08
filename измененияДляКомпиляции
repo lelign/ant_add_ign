@@ -1,0 +1,20 @@
+За основу взят проект для 508 с удалением всего ненужного
+Прищлось внести изменения
+ругался cmake
+    в
+    /home/iru/Projects/pbx-mtv-508-noM26noHlsserverAddDevmemAddReadMem/cmake_modules/FindZvbi.cmake
+        с
+        find_package_handle_standard_args(Zvbi DEFAULT_MSG ZVBI_INCLUDE_DIR ZVBI_LIBRARY)
+        на
+        find_package_handle_standard_args(zvbi DEFAULT_MSG ZVBI_INCLUDE_DIR ZVBI_LIBRARY)
+
+ошибки при сборке
+    /home/iru/Projects/pbx-mtv-508-noM26noHlsserverAddDevmemAddReadMem/zvbi-test/anc-dump.c
+        f_out = open(ANCOUT, O_RDWR|O_CREAT); 
+        f_out = open(ANCOUT, O_RDWR|O_CREAT, 0664); 
+
+    /home/iru/Projects/pbx-mtv-508-noM26noHlsserverAddDevmemAddReadMem/layout/layout.cpp
+        #include <QPainterPath>
+    /home/iru/Projects/pbx-mtv-508-noM26noHlsserverAddDevmemAddReadMem/ntpdate-utils/ntpdate-utils.c
+        fprintf(f, update_hwclock);
+        fprintf(f, "%s", update_hwclock); // ign

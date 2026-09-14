@@ -5,11 +5,23 @@
 #include <QLocale>
 #include <QPainterPath> // ign
 
+#include <QFile>
+#include <QTextStream>
+#include <QLinearGradient>
+#include <QColor>
+
+#include  "mtv-system/mtv-system.h"
+
+#include <QNetworkInterface> // for get_IP
+
+static QLoggingCategory category("LayoutClass");
 #define LAYOUT_PRESET_FILE_NAME      ("pbx-mtv-508_layout_preset")
 #define SETTINGS_SDI_INPUT_FILE_NAME ("pbx-mtv-508_sdi_input")
 #define TCP_PORT 10110
 
-static QLoggingCategory category("\033[32m Layout Class \033[0m");
+
+
+
 #define PEN_WIDTH 2
 #define SizeOfArray(a) (sizeof(a)/sizeof(*a))
 #define FONT_SDI_FORMAT_SIZE 14
@@ -34,14 +46,14 @@ static QLoggingCategory category("\033[32m Layout Class \033[0m");
 #define TALLY_GREEN_OFF_COLOR QColor(0x00, 0x00, 0x00)
 
 
-
 //Layout::Layout(PbxMtvSystem *mtvsystem,  mb86m26_control *m26_control, Gpio *gpio, Eventlog *eventlog) :
 //    mtvsystem(mtvsystem), m26_control(m26_control), gpio(gpio), eventlog(eventlog)
 Layout::Layout(PbxMtvSystem *mtvsystem,  Gpio *gpio, Eventlog *eventlog) :
     mtvsystem(mtvsystem), gpio(gpio), eventlog(eventlog)
 {
-    qCDebug(category) << "creating...";
+    qCDebug(category) << ANSI_GREEN << "creating..." << ANSI_RESET;
 
+    
     for(int i = 0; i < 16; i++) op47[i] = 0;
     for(int i = 0; i < 16; i++) op47_latch[i] = 0;
     output_format = OUT_STD_1080i50;
@@ -78,21 +90,52 @@ Layout::Layout(PbxMtvSystem *mtvsystem,  Gpio *gpio, Eventlog *eventlog) :
     timer_analog_clock.start(50); // 10 (20) Гц — достаточно, чтобы секундная стрелка выглядела "скользящей"
     connect(&timer_analog_clock, &QTimer::timeout, this, &Layout::slot_draw_analog_clock_tick);
 
+    // подготовка сообщений
+    
+    PbxMtvSystem::darken_area_t dark_zone;
+    if (q_image_cache_file.size() != QSize(dark_zone.dark_right - dark_zone.dark_left, dark_zone.dark_bottom - dark_zone.dark_top)) {
+            q_image_cache_file = QImage(dark_zone.dark_right - dark_zone.dark_left, dark_zone.dark_bottom - dark_zone.dark_top, QImage::Format_ARGB32);
+             // Заполняем черным цветом — это будет базовая подложка, если виджеты не перекроют всю зону
+            q_image_cache_file.fill(Qt::black); 
+        }
+    
+    // Запуск однократного таймера на 1000 мс (чтобы система успела загрузиться)
+    // Добавляем mtvsystem (или переменную, в которой лежит указатель) в квадратные скобки
+    // 1. Через 1 секунду после старта включаем флаг сообщения
+    // 1. Сразу при вызове (на старте) красим в зеленый цвет
+    this->m_highlightColor = Qt::green; // Использовать Qt::green безопаснее, чем строку "green"
+    QTimer::singleShot(3000, this, [this, mtvsystem]() {
+        if (mtvsystem) {
+            mtvsystem->mess_exist = true;            
+        }
+        // собственно надпись нарисует draw_message_box_overlay привязан к analog_clock
+        //this->draw_message_box_overlay(this->m_highlightColor);
+        //this->m_highlightColor = Qt::green;
+        // 2. Запускаем второй таймер на 5 секунд
+        QTimer::singleShot(8000, this, [this, mtvsystem]() {
+            if (mtvsystem) {
+                mtvsystem->mess_exist = false;
+            }
+
+            // ТОЛЬКО ЗДЕСЬ (через 5 секунд) 
+            // Вызываем отрисовку — функция сама поймет, что флаг false, и скроет текст            
+            this->draw_message_box_overlay(this->m_highlightColor, this->trouble);
+        });
+    });
+
+      
+
     ini_alarm_time_threshold();
     hdmi_color = 1;
-
+      
     Settings_Read();
 
     gpio->set_mode(gpio_mode);
     preset_Layout_Read(layout_preset.index);
-    qDebug(category) << "\t\tpreset_Layout_Read" << layout_preset.name[0] << "\033[0m";
+    qCDebug(category) << ANSI_GREEN << "preset_Layout_Read" << ANSI_RESET;
 
     sound_routing();
-    QImage my_image; //ign
-    //get_layout();
-    my_image = get_layout(); // ign
     
-    qDebug(category) <<"\t\tget_layout returned my_image" << my_image.size();
 
     cascade_server = new Cascade_server(TCP_PORT);
     connect(cascade_server, &Cascade_server::signal_new_client,    this, &Layout::slot_master_connected);
@@ -145,7 +188,7 @@ void Layout::debugPrintJson(QString str, QByteArray data)
 {
     QJsonParseError err;
     QJsonDocument saveDoc = QJsonDocument::fromJson(data, & err);
-    qCDebug(category) << str << "\n" << saveDoc.toJson().toStdString().c_str();
+    qCDebug(category) << ANSI_GREEN << str << "\n" << saveDoc.toJson().toStdString().c_str()<< ANSI_RESET;
 }
 
 
@@ -170,12 +213,12 @@ void Layout::slot_cascade_device_connected(int index)
 
 void Layout::slot_master_connected(QTcpSocket* pSocket, QString ip)
 {
-    qCDebug(category) << "The master connected with ip:" << ip << "port:" << pSocket->localPort();
+    qCDebug(category) << ANSI_GREEN << "The master connected with ip:" << ip << "port:" << pSocket->localPort() << ANSI_RESET;
 }
 
 void Layout::slot_Disconnected(QTcpSocket* pSocket)
 {
-    qCDebug(category) << "disconnected:" << pSocket->peerAddress().toString();
+    qCDebug(category) << ANSI_GREEN << "disconnected:" << pSocket->peerAddress().toString() << ANSI_RESET;
 }
 
 void Layout::slot_tcp_server_readyRead(QTcpSocket* pSocket, QByteArray data)
@@ -266,11 +309,12 @@ static int common_alarm_old = -1;
 
     QList<int>level_list = mtvsystem->get_audio_level();
 
-    for(int i_cell = 0; i_cell < 16; i_cell++){
+    
+    for(int i_cell = 0; i_cell < 16; i_cell++){ 
         check_audio(i_cell, level_list);
         check_freeze(i_cell);
-        check_video_loss(i_cell);
-    }
+        check_video_loss(i_cell); 
+        }
 
     // flush_overlay();
 
@@ -288,7 +332,7 @@ void Layout::check_freeze(int cell_index)
 {
 int error, error_old;
 
-    error = 0;
+    error = 0;   
     int k = cascade.num * 16 + cell_index;
     if(layout_object[k].cell.video_alarm.enable){
        error = !mtvsystem->get_motion(cell_index);
@@ -393,6 +437,7 @@ void Layout::check_audio(int cell_index, QList<int> level_list)
 int error, error_old;
 
     error = 0;
+    
     int k = cascade.num * 16 + cell_index;
 
     if(layout_object[k].cell.audio_alarm.enable){
@@ -505,7 +550,7 @@ QString Layout::sec_to_TimeStr(qint64 sec_val)
 
 void Layout::draw_alarm_elapsed()
 {
-    for(int index = 0; index < 16; ++index) {
+    for(int index = 0; index < 16; ++index) { 
         int k = cascade.num * 16 + index;
         for(int i = 0; i < layout_object[k].alarm.size(); ++i){
             draw_alarm_label(k, layout_object[k]);
@@ -517,11 +562,11 @@ void Layout::draw_alarm_elapsed()
 
 void Layout::slot_new_format()
 {
-    qDebug(category) << "New SDI Input Format";
+    qCDebug(category) << ANSI_GREEN << "\n\t\tNew SDI Input Format\n" << ANSI_RESET;
     routing_source_video();
     update_alarm();
 
-    for(int i = 0; i < 16; ++i){
+    for(int i = 0; i < 16; ++i){        
         int k = cascade.num * 16 + i;
         layout_object[k].sdi_format_str = mtvsystem->get_sdi_format_str(i);
 
@@ -537,7 +582,7 @@ int width, height;
 int x, y;
 
     if(!layout_object[addr].screen_plan.enable_video) return;
-    if(cascade.num != (addr >> 4)) return;
+    if(cascade.num != (addr >> 3)) return;
     if(teletext_cell.enable && (addr == 0)) return;
 
     switch(layout_object[addr].cell.umd_display){
@@ -577,7 +622,7 @@ int x, y;
     blit_to_frame(&image_label_panel, x, y);
     qDebug() << "update_label_name_channel";
     // flush_overlay();
-    mtvsystem->draw_overlay_fast(&image_label_panel, x, y);
+    mtvsystem->draw_overlay_fast(&image_label_panel, x, y, false);
 }
 
 void Layout::update_sdi_format(int index)
@@ -600,7 +645,7 @@ void Layout::update_sdi_format(int index)
     int y =layout_object[k].screen_plan.panel_format_video.y();
 
     blit_to_frame(&image_sdi_panel, x, y);
-    mtvsystem->draw_overlay_fast(&image_sdi_panel, x, y);
+    mtvsystem->draw_overlay_fast(&image_sdi_panel, x, y, false);
 }
 
 void Layout::flush_overlay()
@@ -610,14 +655,14 @@ void Layout::flush_overlay()
     QElapsedTimer timer;
     timer.start();  
     mtvsystem->draw_overlay(&full_overlay_frame, 0, 0);
-    qDebug(category) << "mtvsystem->draw_overlay(&full_overlay_frame, 0, 0);" << timer.elapsed() << "milliseconds";
+    qCDebug(category) << ANSI_GREEN << "flashed, timer:"<< ANSI_RESET << timer.elapsed() << "milliseconds";
     // system("devmem2 0xFF200004 w 1");  
-    qDebug(category) << "flush_overlay";
+    // qDebug(category) << "flush_overlay";
 }
 
 void Layout::blit_to_frame(QImage *image, int x, int y)
-{
-    QPainter painter(&full_overlay_frame);
+{   
+     QPainter painter(&full_overlay_frame);
     // Source, а не SourceOver: полностью ЗАМЕЩАЕТ пиксели и альфа-канал в этом
     // прямоугольнике, включая обнуление альфы там, где рисуемая картинка прозрачна.
     // Это и есть механизм "очистки" старого содержимого региона.
@@ -650,24 +695,27 @@ static int output_format_old = -1;
 
     QElapsedTimer timer;
     timer.start();
-    qDebug(category) << "====== Start Measuring ==========";
+    qCDebug(category) << ANSI_GREEN << "====== Start Measuring ==========" << ANSI_RESET;
         if(solo_mode.enable)
             layout_border = get_layout_1x1(solo_mode.input);
         else
             layout_border = get_layout();
 
-    qDebug(category) << "The get_layout_3x3 operation took" << timer.elapsed() << "milliseconds";
+    qCDebug(category) << ANSI_GREEN 
+                        << "The get_layout "<< grid <<" operation took" << ANSI_RESET << timer.elapsed() << "milliseconds";
+                        
 
         
     
     blit_to_frame(&layout_border, 0, 0);
 
-    qDebug(category) << "The blit_to_frame operation took" << timer.elapsed() << "milliseconds";
+    qCDebug(category) << ANSI_GREEN 
+                        << "The blit_to_frame operation took"  << ANSI_RESET << timer.elapsed() << "milliseconds";
 
     scte_104_update();
     slot_draw_time_counter(time_counter.text);
 
-    qDebug() << "draw_overlay";
+    qCDebug(category) << ANSI_GREEN << "\n\t\tdraw_overlay > flush_overlay !!!\n" << ANSI_RESET;
     // Это единственное место, где пересобирается ВЕСЬ экран целиком (не точечный
     // патч) - тут двойная буферизация оправдана: собираем полную картинку в
     // full_overlay_frame -> draw_overlay() пишет её в НЕАКТИВНЫЙ буфер -> flip.
@@ -675,21 +723,21 @@ static int output_format_old = -1;
     flush_overlay();
 }
 
-void Layout::draw_overlay_test_file()
-{
-    QImage overlay_test_file("layout.png");
-    blit_to_frame(&overlay_test_file, 0, 0);
-    qDebug() << "draw_overlay_test_file";
-    flush_overlay();
-    // mtvsystem->draw_overlay(&overlay_test_file);
-    // mtvsystem->overlay_sync();
-}
+// void Layout::draw_overlay_test_file()
+// {
+//     QImage overlay_test_file("layout.png");
+//     blit_to_frame(&overlay_test_file, 0, 0);
+//     qDebug() << "draw_overlay_test_file";
+//     flush_overlay();
+//     // mtvsystem->draw_overlay(&overlay_test_file);
+//     // mtvsystem->overlay_sync();
+// }
 
 void Layout::set_aspect_ratio(QRect &rec, int index)
 {
 const float ratio_4_3 = (float)4 / (float)3;
 
-    int k = cascade.num * 16 + index;
+    int k = cascade.num * 8 + index;
 
     if(!layout_object[k].screen_plan.enable_video) return;
 
@@ -809,7 +857,7 @@ void Layout::update_layout()
     gpio->set_mode(gpio_mode);
     cascade_udate();
     draw_overlay();
-    for(int i = 0; i < 16; ++i){
+     for(int i = 0; i < 16; ++i){
         pip_config(i);
     }
 
@@ -847,12 +895,12 @@ void Layout::cascade_udate()
 
 void Layout::cascade_mode_update()
 /*
- *    16-й вход для режима каскадирования
+ *    8-й вход для режима каскадирования
  */
 {
     if(cascade.mode == STAND_ALONE) return;
-    if(cascade.last_slave_device)   return; // последний в цепочке. 16-й как обычный вход
-
+    if(cascade.last_slave_device)   return; // последний в цепочке. 8-й как обычный вход
+   
     // 16-й вход на весь экран
     mtvsystem->configure_image(15, 1920, 1080, 0, 0, 1);
 }
@@ -870,7 +918,7 @@ static int format[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
             if(i == 15) cascade_mode_update(); // чтобы не дёргался вход 8
         }
     }
-    qDebug() << "routing_source_video";
+    qCDebug(category) << ANSI_GREEN << "routing_source_video" << ANSI_RESET;
     // flush_overlay();
 }
 
@@ -949,11 +997,13 @@ int x1, x2;
 
     mtvsystem->bars_configure(router_source, x1, x2, y, scale, enable_1, enable_2);
 }
-
-QString Layout::sdi_key_name(int i)
+QString Layout::sdi_key_name(int i) // increased to 16 channels
 {
-    int major = (i >> 4) + 1;
-    int minor = (i & 0x0F) + 1;
+    // Сдвиг на 4 бита вправо (i >> 4) — это быстрое деление на 16 нацело.
+    int major = (i >> 4) + 1;    
+    // Маска 0x0F (в двоичной системе 00001111) — это взятие остатка от деления на 16 (i % 16).
+    // Результат будет от 0 до 15. Прибавляем 1, чтобы получить каналы от 1 до 16.
+    int minor = (i & 0x0F) + 1;    
     return QString("%1.%2").arg(major).arg(minor);
 }
 
@@ -1084,15 +1134,15 @@ QString Layout::get_preset_file_name(int preset_num)
 }
 
 void Layout::preset_Layout_Read(int preset_num){
-const int x[] = { 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3};
+const int x[] = { 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3}; // try grid 4 * 4
 const int y[] = { 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
 
     QString file_name = get_preset_file_name(preset_num);
 
     QSettings settings(QSettings::SystemScope, file_name); // settings init
 
-    for(uint i = 0; i < SizeOfArray(layout_object); ++i){
-        int k = i & 0x0F;
+    for(uint i = 0; i < SizeOfArray(layout_object); ++i){          
+        int k = i & 0x0F;// чтобы значения остатка были в диапазоне от 0 до 15
         int enable = i < 16;
         QString name_group = "cell_" + QString::number(i);
         settings.beginGroup(name_group);
@@ -1133,11 +1183,11 @@ const int y[] = { 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
     }
 
     settings.beginGroup("common_setting");
-        grid   = settings.value("grid",   GRID_4x4).toInt();
+        grid   = settings.value("grid",   GRID_4x4).toInt();// default settings, checked
     settings.endGroup();
 
     settings.beginGroup("clock_cell");
-        clock_cell.enable      = settings.value("enable",         0).toInt();
+        clock_cell.enable      = settings.value("enable",         0).toInt();// времнно отключил часы 
         clock_cell.scale_x     = settings.value("scale_x",        0).toInt();
         clock_cell.scale_y     = settings.value("scale_y",        0).toInt();
         clock_cell.x           = settings.value("x",              2).toInt();
@@ -1326,28 +1376,27 @@ void Layout::get_grid_size()
 
 QImage Layout::get_layout()
 {
-    get_grid_size();
+    get_grid_size(); // case GRID_4x4: width_grid  =  WIDTH_4x4; height_grid = HEIGHT_4x4;
 
-    set_time_counter_plane();
-    set_label_plane();
+    set_time_counter_plane(); // counter
+    set_label_plane(); // labels
     set_layout_plane();
     set_teletext_plane(layout_object[0].screen_plan.cell);
     set_clock_plane();
 
     if(STAND_ALONE < cascade.mode && cascade.mode < CASCADE_SLAVE)
-        layout_object[15].cell.enable = 0;
+        layout_object[7].cell.enable = 0;
 
     QImage image(1920, 1080, QImage::Format_ARGB32);
-
     for(int i = 0; i < 16; ++i){
-        int k = cascade.num * 16 + i;
+        int k = cascade.num * 8 + i;
         layout_object[k].screen_plan.enable_video = layout_object[k].cell.enable;
         if(layout_object[k].screen_plan.enable_video)
             draw_layout_object(image, layout_object[k]);
     }
 
     for(int i = 0; i < 16; ++i){
-        int k = cascade.num * 16 + i;
+        int k = cascade.num * 8 + i;
         if(label_cell[k].enable)
             draw_label_object(image, label_cell[k]);
     }
@@ -1629,7 +1678,7 @@ void Layout::draw_time_counter(label_t label)
     blit_to_frame(&image_time_counter, label.size.x(), label.size.y());
     // Быстрый путь: сразу в активный HW-буфер, не дожидаясь раз-в-секунду flush_overlay().
     // Это и нужно, чтобы десятые доли секунды реально обновлялись на экране 10 раз/сек.
-    mtvsystem->draw_overlay_fast(&image_time_counter, label.size.x(), label.size.y());
+    mtvsystem->draw_overlay_fast(&image_time_counter, label.size.x(), label.size.y(), false);
 }
 
 void Layout::draw_digital_clock()
@@ -1656,7 +1705,7 @@ QString date_str;
     painter.drawText(clock_rec, Qt::AlignCenter, digital_clock_str);
     painter.end();
     blit_to_frame(&image_clock, digital_clock.clock_size.x(),  digital_clock.clock_size.y());
-    mtvsystem->draw_overlay_fast(&image_clock, digital_clock.clock_size.x(),  digital_clock.clock_size.y());
+    mtvsystem->draw_overlay_fast(&image_clock, digital_clock.clock_size.x(),  digital_clock.clock_size.y(), false);
 
     QRect date_rec = digital_clock.date_rec;
     date_rec.moveTo(0,0);
@@ -1679,17 +1728,24 @@ QString date_str;
 
     painter_date.drawText(date_rec, Qt::AlignCenter, date_str);
     blit_to_frame(&image_date, digital_clock.date_rec.x(),  digital_clock.date_rec.y());
-    mtvsystem->draw_overlay_fast(&image_date, digital_clock.date_rec.x(),  digital_clock.date_rec.y());
+    mtvsystem->draw_overlay_fast(&image_date, digital_clock.date_rec.x(),  digital_clock.date_rec.y(), false);
 
     mtvsystem->overlay_sync();
 }
 
 void Layout::slot_draw_analog_clock_tick()
 {
-    // Пока выбран стиль "аналоговые часы" - перерисовываем чаще 1 раза в секунду,
-    // чтобы секундная стрелка двигалась плавно, а не "прыжками".
+    
     if(!clock_cell.style)
         draw_analog_clock();
+
+    // =================================================================
+    // 3. СИНХРОННЫЙ ВЫВОД ПЛАШКИ ПОВЕРХ ВСЕГО
+    // =================================================================
+    if (mtvsystem->mess_exist) {       
+        // Вызываем рисование текста сообщения поверх всего
+        this->draw_message_box_overlay(m_highlightColor, trouble);
+    }   
 }
 
 void Layout::draw_analog_clock()
@@ -1774,7 +1830,7 @@ void Layout::draw_analog_clock()
     blit_to_frame(&image_clock, clock_rec.x(),  clock_rec.y());
     // Быстрый путь: сразу в активный HW-буфер (без flip) - FPGA подхватит
     // изменение стрелок в пределах ~16мс благодаря slot_fps_hardware_trigger().
-    mtvsystem->draw_overlay_fast(&image_clock, clock_rec.x(), clock_rec.y());
+    mtvsystem->draw_overlay_fast(&image_clock, clock_rec.x(), clock_rec.y(), false);
 }
 
 
@@ -1795,8 +1851,8 @@ void Layout::draw_frame(QImage &image, QColor color, QRect boundary, int width)
 void Layout::DisplayTALLY(int addr, int tally)
 {
     if(!layout_object[addr].screen_plan.enable_video) return;
-
-    if(cascade.num == (addr >> 4)){
+    
+     if(cascade.num == (addr >> 4)){
         slot_TALLY(addr & 0x0F, tally);
     }
 }
@@ -1874,7 +1930,7 @@ void Layout::draw_TALLY_indicator_old_style(QRect cell, QColor color)
     get_image_TALLY_indicator_old_style(image_tally, tally_cell, color);
 
     blit_to_frame(&image_tally, cell.x(), cell.y());
-    mtvsystem->draw_overlay_fast(&image_tally, cell.x(), cell.y());
+    mtvsystem->draw_overlay_fast(&image_tally, cell.x(), cell.y(), false);
     mtvsystem->overlay_sync();
 }
 
@@ -1922,7 +1978,7 @@ QColor color;
 
     cell = layout_object.screen_plan.cell;
     tally_rec = get_TALLY_indicator_rec(cell);
-
+    
     QImage image_tally(tally_rec.width(), tally_rec.height(),  QImage::Format_ARGB32);
     QRect alarm_rec;
     alarm_rec = QRect(0, 0, tally_rec.width(), tally_rec.height());
@@ -1948,7 +2004,7 @@ QColor color;
     }
 
     blit_to_frame(&image_tally, tally_rec.x(), tally_rec.y());
-    mtvsystem->draw_overlay_fast(&image_tally, tally_rec.x(), tally_rec.y());
+    mtvsystem->draw_overlay_fast(&image_tally, tally_rec.x(), tally_rec.y(), false);
     mtvsystem->overlay_sync();
 }
 
@@ -2261,7 +2317,7 @@ void Layout::draw_alarm_label(int index, layout_object_t layout_object)
         painter_alarm.setPen(QPen(Qt::white));
         painter_alarm.drawText(alarm_rec, Qt::AlignCenter, alarm_label.at(i).text + elapsed_str);
         blit_to_frame(&image_alarm, alarm_label_rec.x(),  alarm_label_rec.y());
-        mtvsystem->draw_overlay_fast(&image_alarm, alarm_label_rec.x(),  alarm_label_rec.y());
+        mtvsystem->draw_overlay_fast(&image_alarm, alarm_label_rec.x(),  alarm_label_rec.y(), false);
         alarm_label_rec.translate(0, offset_h);
     }
 }
@@ -2293,15 +2349,15 @@ int error, error_old;
     if(error){
         alarm_t alarm;
         alarm.bkground_color = QColor(255, 0, 0, 225);
-        alarm.text = "Video loss";
+        alarm.text = "Video loss";        
         alarm.type = VIDEO_LOST;
         alarm.time.start();
-        layout_object[k].alarm.append(alarm);
+        layout_object[k].alarm.append(alarm);        
     }
     else{
         layout_object[k].alarm.removeAt(index);
     }
-
+    
     if(error)
         eventlog_add_input_state("Video Input %1: Loss", cell_index);
 
@@ -2340,7 +2396,7 @@ static int format[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                 QString str, state_str;
 
                 if((cascade.mode > STAND_ALONE) && (i == 15) && !cascade.last_slave_device)
-                    continue;   // Не писать в журнал формат 16-го входа
+                    continue;   // Не писать в журнал формат 8-го входа
 
                 state_str = mtvsystem->get_sdi_format_str(i);;
                 eventlog_add_input_state("Video Input %1: " + state_str, i);
@@ -2362,7 +2418,7 @@ void Layout::clean_teletext_image(int channel)
     int y = panel.y();
 
     blit_to_frame(&image_teletext, x, y);
-    mtvsystem->draw_overlay_fast(&image_teletext, x, y);
+    mtvsystem->draw_overlay_fast(&image_teletext, x, y, false);
 }
 
 
@@ -2380,7 +2436,7 @@ void Layout::display_teletext(QImage image_teletext)
     int y = panel.y();
 
     blit_to_frame(&image, x, y);
-    mtvsystem->draw_overlay_fast(&image, x, y);
+    mtvsystem->draw_overlay_fast(&image, x, y, false);
     qDebug() << "display_teletext";
     // flush_overlay();
     // mtvsystem->overlay_sync();
@@ -2431,13 +2487,14 @@ static int op47_old[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         }
     }
 
-    qDebug() << "slot_update_op47";
+    // qCDebug(category) << ANSI_GREEN << "slot_update_op47" << ANSI_RESET;
     // flush_overlay();
 }
 
 
 void Layout::scte_104_update()
 {
+    // for(int i = 0; i < 16; ++i){
     for(int i = 0; i < 16; ++i){
         display_scte_104(i);
     }
@@ -2479,7 +2536,7 @@ void Layout::display_scte_104(int index)
     int y = panel.y();
 
     blit_to_frame(&image_scte_104, x, y);
-    mtvsystem->draw_overlay_fast(&image_scte_104, x, y);
+    mtvsystem->draw_overlay_fast(&image_scte_104, x, y, false);
 }
 
 
@@ -2519,7 +2576,7 @@ void Layout::display_op47_icons(int cell_index)
     int y =panel.y();
 
     blit_to_frame(&image_text_icons, x, y);
-    mtvsystem->draw_overlay_fast(&image_text_icons, x, y);
+    mtvsystem->draw_overlay_fast(&image_text_icons, x, y, false);
 }
 
 
@@ -2536,4 +2593,242 @@ void Layout::slot_splice(int index, QString text_in, QString text_out)
     display_scte_104(index);
     qDebug() << "slot_splice";
     // flush_overlay();
+}
+
+void Layout::drawSingleBar(QPainter &painter, double level, int x_offset, int y_offset, int width, int height) {
+    if (level < 0.0) level = 0.0;
+    if (level > 1.0) level = 1.0;
+
+    // 1. Темный фон под конкретную полоску
+    painter.fillRect(x_offset, y_offset, width, height, QColor(25, 25, 25));
+
+    int barHeight = static_cast<int>(height * level);
+    int topY = y_offset + (height - barHeight);
+
+    // 2. Активный уровень градиента (Зеленый -> Желтый -> Красный)
+    if (barHeight > 0) {
+        QLinearGradient gradient(x_offset, y_offset + height, x_offset, y_offset);
+        gradient.setColorAt(0.0, QColor(0, 220, 100)); 
+        gradient.setColorAt(0.7, QColor(240, 200, 0)); 
+        gradient.setColorAt(0.9, QColor(255, 50, 50)); 
+
+        QRect activeRect(x_offset, topY, width, barHeight);
+        painter.fillRect(activeRect, gradient);
+    }
+
+    // 3. Светодиодные насечки (горизонтальная сетка)
+    painter.setPen(QColor(15, 15, 15));
+    int segmentHeight = 3;
+    int gapHeight = 1;
+    for (int y = y_offset; y < y_offset + height; y += (segmentHeight + gapHeight)) {
+        painter.fillRect(x_offset, y, width, gapHeight, QColor(15, 15, 15));
+    }
+}
+
+void Layout::updateMeterRoutine() {
+    // ---- 1. Сначала читаем уровни из файла ----
+    QFile file("levels.txt");
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&file);
+        for (int i = 0; i < 64; ++i) {
+            double value = 0.0;
+            if (!in.atEnd()) {
+                in >> value;
+            }
+            m_channelLevels[i] = value;
+        }
+        file.close();
+    }
+
+    // ---- 2. Высчитываем размеры общего холста для аудиометра ----
+    int totalGroups = 16;
+    int channelsPerGroup = 4;
+    
+    int meterWidth = 4;     // Ширина полоски
+    int meterHeight = 200;  // Высота полоски
+    int innerSpacing = 2;   // Зазор внутри группы
+    int groupSpacing = 10;  // Зазор между группами
+    int padding = 15;       // Внутренние поля рамки
+
+    // Считаем полную ширину и высоту результирующей картинки
+    int groupWidth = (meterWidth * channelsPerGroup) + (innerSpacing * (channelsPerGroup - 1));
+    int totalWidth = (groupWidth * totalGroups) + (groupSpacing * (totalGroups - 1)) + (padding * 2);
+    int totalHeight = meterHeight + 60; // Место под полоски + рамки + текст снизу
+
+    // ---- 3. Создаем временный QImage и отрисовываем всю графику ----
+    // Используем Format_ARGB32 для поддержки прозрачности (альфа-канала)
+    QImage meterImage(totalWidth, totalHeight, QImage::Format_ARGB32);
+    meterImage.fill(Qt::transparent); // Заполняем прозрачностью
+
+    QPainter painter(&meterImage);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    int currentX = padding;
+    int startY = padding;
+
+    for (int g = 0; g < totalGroups; ++g) {
+        // Рисуем подложку-рамку для группы
+        painter.setPen(QColor(40, 40, 44));
+        painter.setBrush(QColor(22, 22, 25));
+        painter.drawRoundedRect(currentX - 4, startY - 6, groupWidth + 8, meterHeight + 12, 4, 4);
+
+        // Рисуем 4 канала внутри этой группы
+        for (int c = 0; c < channelsPerGroup; ++c) {
+            int channelIndex = (g * channelsPerGroup) + c;
+            double currentLevel = m_channelLevels[channelIndex];
+
+            drawSingleBar(painter, currentLevel, currentX, startY, meterWidth, meterHeight);
+            currentX += meterWidth + innerSpacing;
+        }
+
+        // Подпись группы (G1 - G16)
+        painter.setPen(QColor(136, 136, 136));
+        QFont font = painter.font();
+        font.setPointSize(8);
+        font.setBold(true);
+        painter.setFont(font);
+        
+        QString labelText = "G" + QString::number(g + 1);
+        painter.drawText(currentX - groupWidth - 4, startY + meterHeight + 20, groupWidth + 8, 15, Qt::AlignCenter, labelText);
+
+        currentX += groupSpacing - innerSpacing;
+    }
+    
+    painter.end(); // Завершаем рисование на QImage
+
+    // ---- 4. ВЫЗОВ ВАШЕЙ ФУНКЦИИ БЛИТТИНГА ----
+    // Передаем готовую картинку со всеми 64 каналами и координаты,
+    // где этот блок должен расположиться внутри кадра full_overlay_frame
+    int destX = 50;  // Задайте ваши X координаты размещения
+    int destY = 100; // Задайте ваши Y координаты размещения
+    
+    // blit here
+    blit_to_frame(&meterImage, destX, destY);
+    mtvsystem->draw_overlay_fast(&meterImage, destX, destY, false);
+}
+
+
+
+void Layout::readAudioLevelsFile() {
+    QFile file("levels.txt");
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return; 
+    }
+
+    QTextStream in(&file);
+    for (int i = 0; i < 64; ++i) {
+        double value = 0.0;
+        if (!in.atEnd()) {
+            in >> value;
+        }
+        // Записываем новое значение в массив
+        m_channelLevels[i] = value;
+    }
+    file.close();
+
+}
+
+
+void Layout::draw_message_box_overlay(const QColor &color, QString trouble)
+{
+    if (q_image_cache_file.isNull()) return;
+
+    PbxMtvSystem::darken_area_t dark; 
+    
+    // Скрываем текст, если система говорит, что сообщения больше нет
+    if (mtvsystem && !mtvsystem->mess_exist) {
+        // Очищаем кэш изображения, делая его полностью прозрачным
+        q_image_cache_file.fill(Qt::transparent); 
+        
+        // Быстро отправляем пустую (очищенную) картинку на экран, чтобы текст исчез
+        
+        mtvsystem->draw_overlay_fast(&q_image_cache_file, dark.dark_left, dark.dark_top, true);
+        mtvsystem->draw_overlay(&full_overlay_frame, 0, 0);
+        return; // Выходим из функции, ничего не рисуя поверх!
+    }
+
+    QString profitt_IP_MAC = get_network_setting();
+
+    if (!profitt_IP_MAC.isEmpty()) {
+        QPainter painter(&q_image_cache_file);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::TextAntialiasing);
+
+        QFont font("Arial", 36, QFont::Bold);
+        painter.setFont(font);
+
+        // 1. Ограничиваем прямоугольник для отрисовки (весь размер кэш-картинки)
+        QRect rect = q_image_cache_file.rect();
+
+        // Флаги: выравнивание по центру + поддержка переносов \n + замена \t на пробелы
+        int flags = Qt::AlignLeft | Qt::TextWordWrap | Qt::TextExpandTabs;
+
+        // 2. РИСУЕМ ЧЕРНЫЙ КОНТУР ТЕКСТА
+        // Так как drawText не умеет делать QPen-обводку напрямую, классический быстрый трюк 
+        // для встраиваемых систем — отрисовать текст со смещением на 2 пикселя во все стороны
+        painter.setPen(Qt::black);
+        int offset = 2;
+        painter.drawText(rect.adjusted(-offset, -offset, -offset, -offset), flags, profitt_IP_MAC);
+        painter.drawText(rect.adjusted(offset, -offset, offset, -offset), flags, profitt_IP_MAC);
+        painter.drawText(rect.adjusted(-offset, offset, -offset, offset), flags, profitt_IP_MAC);
+        painter.drawText(rect.adjusted(offset, offset, offset, offset), flags, profitt_IP_MAC);
+        if (color != Qt::green){
+            painter.drawText(rect.adjusted(offset, offset, offset, offset), flags, trouble);
+        }
+
+        // 3. РИСУЕМ БЕЛОЕ ТЕЛО БУКВ ПОВЕРХ
+        painter.setPen(color);
+        painter.drawText(rect, flags, profitt_IP_MAC);
+
+        painter.end();
+    }
+
+    
+    mtvsystem->draw_overlay_fast(&q_image_cache_file, dark.dark_left, dark.dark_top, true);
+    
+    // создание урезанного холста croppedCanvas
+    // Вычисляем ширину и высоту на основе структуры
+    int crop_width = dark.dark_right - dark.dark_left;   // 1820 - 100 = 1720 пикселей
+    int crop_height = dark.dark_bottom - dark.dark_top;  // 640 - 440 = 200 пикселей
+    QImage croppedCanvas = full_overlay_frame.copy(dark.dark_left, dark.dark_top, crop_width, crop_height);
+    mtvsystem->draw_overlay_fast(&croppedCanvas, dark.dark_left, dark.dark_top, false);
+}
+
+
+// layout.cpp
+QString Layout::get_network_setting() 
+{
+    QString IP_mac; 
+
+    // Перебираем интерфейсы через Qt
+    foreach(QNetworkInterface netInterface, QNetworkInterface::allInterfaces())
+    {
+        // Ищем именно eth0 и пропускаем петлевой интерфейс
+        if(!(netInterface.flags() & QNetworkInterface::IsLoopBack) && netInterface.name() == "eth0")
+        {                
+            network_0.mac = netInterface.hardwareAddress();
+            
+            // Получаем записи адресов, которые включают и IP, и Маску, и Бродкаст
+            QList<QNetworkAddressEntry> entries = netInterface.addressEntries();
+            for (const QNetworkAddressEntry &entry : entries) 
+            {
+                // Нам нужен только IPv4
+                if(entry.ip().protocol() == QAbstractSocket::IPv4Protocol)
+                {
+                    // Сохраняем в вашу структуру network_0 данные через Qt
+                    network_0.ip   = entry.ip().toString();
+                    network_0.mask = entry.netmask().toString();
+                    network_0.gw   = ""; // Шлюз (Gateway) Qt напрямую не получает, если он критичен — см. Вариант 2
+
+                    // qDebug(category) << "\tconnected IP:" << network_0.ip << "MAC:" << network_0.mac;
+                    
+                    // Формируем результирующую строку
+                    IP_mac = QString("\tProfitt PBX-MTV-5161 \n\tIP: %1 \n\tMAC: %2").arg(network_0.ip).arg(network_0.mac);
+                    return IP_mac;
+                }
+            }
+        }
+    }
+    
+    return QString(); 
 }

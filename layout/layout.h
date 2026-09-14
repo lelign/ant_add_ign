@@ -27,6 +27,11 @@
 
 #define CASCADE_NUM 4 // кол-во блоков в каскаде
 
+#define ANSI_GREEN  "\033[32m" //colorised output
+#define ANSI_RESET  "\033[0m"
+
+#include <vector>
+
 class Layout : public QObject
 {
     Q_OBJECT
@@ -249,6 +254,8 @@ public:
     Cascade_server  *cascade_server;
     Time_counter    *timer_time_counter;
 
+    QImage q_image_cache_file; // Наш буфер накопления фона подложки
+
 private:
     QImage *image_clock;
     QTimer timer_update_alarm;
@@ -331,6 +338,39 @@ private:
     QImage full_overlay_frame;   // общий кадр 1920x1080, накапливает все элементы
     void blit_to_frame(QImage *image, int x, int y);
     void flush_overlay();
+
+    
+    void readAudioLevelsFile();
+     // Локальная функция рисования отдельного светодиодного бара на QImage
+    void drawSingleBar(QPainter &painter, double level, int x_offset, int y_offset, int width, int height);
+
+    QTimer *m_timer;
+    QList<double> m_channelLevels;
+    QColor m_highlightColor;
+    QString trouble;
+    void draw_message_box_overlay(const QColor &color, QString trouble);
+
+    int m_fileCheckCounter = 0; // Переменная для пропуска тактов таймера
+    QImage m_cachedTextImage;    // Кэш для картинки с текстом (message.txt)
+    QString m_lastCachedMessage; // Сюда пишем текст, чтобы знать, изменился ли файл
+
+    QImage m_darkBlankImage; // Маленькая заглушка для фильтрации luma
+
+    struct net_setting_t{
+        QString ip;
+        QString mask;
+        QString gw;
+        QString mac;
+    };
+
+    net_setting_t network_0;
+
+    QString get_network_setting(); // перенесен из mtv-web
+
+ 
+private slots:
+    // Вызывается таймером каждые 100 мс
+    void updateMeterRoutine();
 
 signals:
     void signal_solo(solo_mode_t solo_mode);

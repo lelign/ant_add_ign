@@ -1,0 +1,2 @@
+чтение и запись в /etc/network/interfaces
+соотвю значения отображаются в web /system > IP address Netmask Gateway

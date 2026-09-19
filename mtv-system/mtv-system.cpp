@@ -490,11 +490,8 @@ PbxMtvSystem::PbxMtvSystem()
         init_overlay_memory();
         uint8_t* start_address = reinterpret_cast<uint8_t*>(buffer);
         uint8_t* end_address   = start_address + video_size;
-        qCDebug(category) << ANSI_MAGENTA 
-                        << "\t\tBuffer START address:" << static_cast<void*>(start_address)
-                        << "\n\t\tBuffer END   address:" << static_cast<void*>(end_address)
-                        << ANSI_RESET;        
-        // qDebug(category) << "Buffer END   address:" << static_cast<void*>(end_address);
+        qDebug(category) << "Buffer START address:" << static_cast<void*>(start_address);
+        qDebug(category) << "Buffer END   address:" << static_cast<void*>(end_address);
         //qDebug(category) << "Total buffer size:   " << video_size << "bytes";
         
         connect(&sdi_format_timer, &QTimer::timeout, this, &PbxMtvSystem::sdi_format_timeout);
@@ -520,7 +517,33 @@ PbxMtvSystem::~PbxMtvSystem()
 #include <fcntl.h>
 #include <unistd.h>
 
+/*init_overlay_memory() добавьте старт таймера:*/
+/*void PbxMtvSystem::init_overlay_memory() {
+    overlay_fd = open("/dev/mtv-overlay", O_RDWR);
+    if (overlay_fd >= 0) {
+        //buffer = (char*)mmap(NULL, 1920*1080*3, PROT_READ | PROT_WRITE, MAP_SHARED, overlay_fd, 0);
+        buffer = (char*)mmap(NULL, 1920*1080*2, PROT_READ | PROT_WRITE, MAP_SHARED, overlay_fd, 0);
 
+        if (buffer != MAP_FAILED) {
+            qDebug(category) << "Success! Kernel memory mapped via mmap";
+
+            // ИНИЦИАЛИЗИРУЕМ АППАРАТНЫЙ ТАЙМЕР НА 60 Гц (16 мс) 
+            fps_timer = new QTimer(this);
+            connect(fps_timer, &QTimer::timeout, this, &PbxMtvSystem::slot_fps_hardware_trigger);
+            fps_timer->setInterval(16); // 16 мс = ~60 кадров в секунду
+            fps_timer->start();
+        }else{
+
+                qDebug(category) << "else Success";
+
+        }
+
+    }else{
+        qDebug(category) << "if (overlay_fd >= 0)";
+
+    }
+}
+*/
 
 void PbxMtvSystem::init_overlay_memory() {
     // Выставляем полный размер RGB888 кадра
@@ -532,19 +555,43 @@ void PbxMtvSystem::init_overlay_memory() {
         buffer = (char*)mmap(NULL, video_size, PROT_READ | PROT_WRITE, MAP_SHARED, overlay_fd, 0);
 
         if (buffer != MAP_FAILED) {
-                qCDebug(category) << ANSI_MAGENTA << "Success! Kernel memory mapped via mmap"  << ANSI_RESET;
+            qDebug(category) << "mtv-system: Success! Kernel memory mapped via mmap";
+            /*
+            qDebug(category) << "mtv-system: Total buffer size: " << video_size << "bytes";
+            qDebug(category) << "mtv-system: Buffer START address:" << static_cast<void*>(buffer);
+            qDebug(category) << "mtv-system: Buffer END address:  " << static_cast<void*>(buffer + video_size);
+            */
+
             // Инициализация FPS-таймера на частоту обновления экрана (~60 Гц)
             fps_timer = new QTimer(this);
             connect(fps_timer, &QTimer::timeout, this, &PbxMtvSystem::slot_fps_hardware_trigger);
             fps_timer->setInterval(16); // 16 миллисекунд
             fps_timer->start();
         } else {
-            qCritical(category) << ANSI_RED << "mtv-system: critical error mmap! Cause:" << strerror(errno) << ANSI_RESET;
+            qCritical(category) << "mtv-system: critical error mmap! Cause:" << strerror(errno);
         }
     } else {
-        qCritical(category) << ANSI_RED << "mtv-system: Can't open /dev/mtv-overlay! Error:" << strerror(errno) << ANSI_RESET;
+        qCritical(category) << "mtv-system: Can't open /dev/mtv-overlay! Error:" << strerror(errno);
     }
 }
+
+
+/*void PbxMtvSystem::init_overlay_memory() {
+    int fd = open("/dev/mtv-overlay", O_RDWR);
+    if (fd >= 0) {
+        // Теперь компилятор знает все флаги и успешно соберет Zero-Copy маппинг
+        buffer = (char*)mmap(NULL, 1920*1080*3, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        close(fd);
+        
+        if (buffer == MAP_FAILED) {
+            qCritical(category) << "critical error: mmap of buffers FPGA return MAP_FAILED!";
+        } else {
+            qDebug(category) << "Success! Kernel memory mapped to Userspace at:" << static_cast<void*>(buffer);
+        }
+    } else {
+        qCritical(category) << "Failed to open /dev/mtv-overlay for mmap! Error:" << strerror(errno);
+    }
+}*/
 
 
 /*Реализуйте функцию триггера, которая будет непрерывно кормить FPGA данными:*/
@@ -677,7 +724,7 @@ void PbxMtvSystem::framebuffer_reconfigure(int index, int width, int height)
                 base = REG_FRAMEBUFFER_15;
                 break;
         }
-
+        
 
         reg_write(base, 1, width*height/3);
         reg_write(base, 2, 
@@ -836,7 +883,7 @@ void PbxMtvSystem::scaler_coeff(int index, uint32_t * coeff)
                 base = REG_SCALER_15;
                 break;
         }
-
+        
         for(unsigned int i=0; i<32; i++){
                 reg_write(base, 10, coeff[i*3+0]);
                 reg_write(base, 11, coeff[i*3+1]);
@@ -870,7 +917,29 @@ void PbxMtvSystem::scaler_reconfigure(int index, int width_in, int height_in, in
         }
 }
 
+/*//main void
+void PbxMtvSystem::reg_write(uint32_t block, uint32_t addr, uint32_t data)
+{
+        strmem_reg_data reg_data;
+        int ret;
+        int fd;
 
+        reg_data.block = block;
+        reg_data.address = addr*4;
+        reg_data.data = data;
+        reg_data.rw = STR_REG_WRITE;
+
+        fd = open(fname, O_RDONLY);
+        if(fd<0){
+                return;
+        }
+        ret = ioctl(fd, STRMEM_IOCTL_REG, &reg_data);
+	if(ret<0){
+	        printf("ioctl error\n");
+	}
+        close(fd);
+}
+*/
 
 void PbxMtvSystem::reg_write(uint32_t block, uint32_t addr, uint32_t data)
 {
@@ -1074,30 +1143,80 @@ const int16_t uint8_crcb_b_data[] = {
         56, -9, 56, -9, 56, -9, 56, -9,
 };
 
-void PbxMtvSystem::convert_line(QImage * img, int y, int width, uint8_t * buffer, bool darken, int screen_x_start, int screen_y, QImage * cacheImg) 
-{
-    
+// void PbxMtvSystem::convert_line(QImage * img, int y, int width, uint8_t * buffer)
+// {
+//         const uint8_t * line = img->constScanLine(y);
+
+//         for(int x=0; x<width; x++){
+//                 uint8x8x3_t ycrcb_data;
+                
+//                 // вычисление y
+//                 uint8x8x4_t rgb_data = vld4_u8(line + x*8*4);
+//                 ycrcb_data.val[0] = rgb_data.val[3];
+//                 int16x8_t data_y = vmulq_s16(vreinterpretq_s16_u16(vaddl_u8(rgb_data.val[2], vmov_n_u8(0))), vmovq_n_s16(27));
+//                 data_y = vmlaq_s16(data_y, vreinterpretq_s16_u16(vaddl_u8(rgb_data.val[1], vmov_n_u8(0))), vmovq_n_s16(92));
+//                 data_y = vmlaq_s16(data_y, vreinterpretq_s16_u16(vaddl_u8(rgb_data.val[0], vmov_n_u8(0))), vmovq_n_s16(9));
+//                 ycrcb_data.val[1] = vreinterpret_u8_s8(vshrn_n_s16(data_y, 7));
+
+//                 // вычисление cr
+//                 int16x8_t data_cr = vmulq_s16(vreinterpretq_s16_u16(vaddl_u8(rgb_data.val[2], vmov_n_u8(0))), vld1q_s16(uint8_crcb_r_data));
+//                 data_cr = vmlaq_s16(data_cr, vreinterpretq_s16_u16(vaddl_u8(rgb_data.val[1], vmov_n_u8(0))), vld1q_s16(uint8_crcb_g_data));
+//                 data_cr = vmlaq_s16(data_cr, vreinterpretq_s16_u16(vaddl_u8(rgb_data.val[0], vmov_n_u8(0))), vld1q_s16(uint8_crcb_b_data));
+//                 ycrcb_data.val[2] = vreinterpret_u8_s8(vadd_s8(vshrn_n_s16(data_cr, 7), vmov_n_s8(128)));
+//                 vst3_u8(buffer+x*3*8, ycrcb_data);
+//         }
+// }
+
+
+void PbxMtvSystem::convert_line(QImage * img, int y, int width, uint8_t * buffer, bool darken, int screen_x_start, int screen_y, QImage * cacheImg) {
+    if (y < 0 || y >= img->height()) {
+        qCritical() << "CRITICAL ERROR: Requested y line" << y << "is out of QImage bounds";
+        return;
+    }
+    if (width <= 0 || width > img->width() || width > 1920) {
+        qCritical() << "CRITICAL ERROR: Invalid width:" << width;
+        return;
+    }
+
     uint8_t * dst = buffer;
     const uint8_t * line = img->constScanLine(y);
+    if (!line) {
+        qCritical() << "CRITICAL ERROR: constScanLine(" << y << ") returned NULL!";
+        return;
+    }
 
-    //  объявляем векторы с целочисленными коэффициентами для перевода RGB в YUV по стандарту BT.601
-    // vmovq_n_u16(77) <= вектор, полностью забитый числом 77, чтобы обрабатывать по 8 пикселей одновременно
-    uint16x8_t y_r = vmovq_n_u16(77); uint16x8_t y_g = vmovq_n_u16(150); uint16x8_t y_b = vmovq_n_u16(29); // Y
-    int16x8_t cb_r = vmovq_n_s16(-43); int16x8_t cb_g = vmovq_n_s16(-85); int16x8_t cb_b = vmovq_n_s16(128); // Cb
-    int16x8_t cr_r = vmovq_n_s16(128); int16x8_t cr_g = vmovq_n_s16(-107); int16x8_t cr_b = vmovq_n_s16(-21); // Cr
+    // Коэффициенты BT.601.
+    // Y считаем БЕЗ ЗНАКА: коэффициенты все положительные и в сумме дают 256,
+    // поэтому для яркого пикселя (255,255,255) сумма произведений доходит до
+    // 255*256 = 65280 — это переполняет int16 (макс. 32767), но укладывается
+    // в uint16 (макс. 65535). Со знаковой арифметикой здесь было переполнение,
+    // из-за которого белый текст на видео давал "шумные"/битые пиксели.
+    uint16x8_t y_r = vmovq_n_u16(77);
+    uint16x8_t y_g = vmovq_n_u16(150);
+    uint16x8_t y_b = vmovq_n_u16(29);
 
-    darken_area_t dark_zone;
+    // Cb/Cr коэффициенты знакопеременные, их сумма по модулю не превышает 128,
+    // так что максимум |255*128| = 32640 спокойно помещается в int16 —
+    // тут знаковая арифметика корректна и переполнения нет.
+    int16x8_t cb_r = vmovq_n_s16(-43);
+    int16x8_t cb_g = vmovq_n_s16(-85);
+    int16x8_t cb_b = vmovq_n_s16(128);
+    
+    int16x8_t cr_r = vmovq_n_s16(128);
+    int16x8_t cr_g = vmovq_n_s16(-107);
+    int16x8_t cr_b = vmovq_n_s16(-21);
 
+    // Округляем основную сетку обработки вниз до ближайшего кратного 8
     int x = 0;
-    // Конструкция width & ~7 отсекает остаток строки, делящийся на 8
     int vector_width = width & ~7; 
 
+    darken_area_t dark_zone;
     // Проверяем попадание строки в зону плашки по Y
     bool is_y_inside_dark_zone = (screen_y >= dark_zone.dark_top && screen_y < dark_zone.dark_bottom);
-    
+
     // Получаем строку для записи в кэш-картинку Layout, если мы в режиме отрисовки виджетов
     uint8_t * cache_line = nullptr;
-    if (!darken && this->mess_exist && is_y_inside_dark_zone && cacheImg && !cacheImg->isNull()) {
+    if (!darken && mess_exist && is_y_inside_dark_zone && cacheImg && !cacheImg->isNull()) {
         int cache_y = screen_y - dark_zone.dark_top;
         cache_line = cacheImg->scanLine(cache_y); // Открываем строку кэша на запись
     }
@@ -1107,103 +1226,368 @@ void PbxMtvSystem::convert_line(QImage * img, int y, int width, uint8_t * buffer
     uint16x8_t v_dark_left = vmovq_n_u16(dark_zone.dark_left);
     uint16x8_t v_dark_right = vmovq_n_u16(dark_zone.dark_right);
 
-
     int dark_zone_width = dark_zone.dark_right - dark_zone.dark_left;
-        for(; x < vector_width; x += 8) {
-                // (Загрузка данных): Извлекает из памяти 8 пикселей. Формат ARGB 
-                // разделяется на  4 независимых вектора по цветовым каналам: 
-                // rgb_data.val[0] — Синий, 
-                //          val[1] — Зеленый, 
-                //          val[2] — Красный, 
-                //          val[3] — Альфа.
-                uint8x8x4_t rgb_data = vld4_u8(line + x * 4);
-                uint16x8_t r_u = vmovl_u8(rgb_data.val[2]);
-                uint16x8_t g_u = vmovl_u8(rgb_data.val[1]);
-                uint16x8_t b_u = vmovl_u8(rgb_data.val[0]);
 
-                // Рассчитываем стандартный YUV
-                // Вычисляем яркость (Y\ и цветовые компоненты (Cb/Cr)
-                // с помощью векторного перемножения и сложения за минимальное количество тактов процессора.
-                uint16x8_t y_acc = vmulq_u16(r_u, y_r);
-                y_acc = vmlaq_u16(y_acc, g_u, y_g);
-                y_acc = vmlaq_u16(y_acc, b_u, y_b);
-                uint8x8_t y_val = vqshrn_n_u16(y_acc, 8); 
+    // Основной цикл: обрабатываем по 8 пикселей за раз
+    for(; x < vector_width; x += 8) {
+        uint8x8x4_t rgb_data = vld4_u8(line + x * 4);
+        
+        uint8x8_t b_val = rgb_data.val[0];
+        uint8x8_t g_val = rgb_data.val[1];
+        uint8x8_t r_val = rgb_data.val[2];
+        uint8x8_t a_val = rgb_data.val[3];
 
-                int16x8_t b = vreinterpretq_s16_u16(b_u); int16x8_t g = vreinterpretq_s16_u16(g_u); int16x8_t r = vreinterpretq_s16_u16(r_u);
-                int16x8_t cb_acc = vmulq_s16(r, cb_r); cb_acc = vmlaq_s16(cb_acc, g, cb_g); cb_acc = vmlaq_s16(cb_acc, b, cb_b);
-                uint8x8_t cb_val = vqmovun_s16(vaddq_s16(vshrq_n_s16(cb_acc, 8), vmovq_n_s16(128)));
+        uint16x8_t r_u = vmovl_u8(r_val);
+        uint16x8_t g_u = vmovl_u8(g_val);
+        uint16x8_t b_u = vmovl_u8(b_val);
 
-                int16x8_t cr_acc = vmulq_s16(r, cr_r); cr_acc = vmlaq_s16(cr_acc, g, cr_g); cr_acc = vmlaq_s16(cr_acc, b, cr_b);
-                uint8x8_t cr_val = vqmovun_s16(vaddq_s16(vshrq_n_s16(cr_acc, 8), vmovq_n_s16(128)));
+        // Y: беззнаковая арифметика (см. комментарий у коэффициентов выше)
+        uint16x8_t y_acc = vmulq_u16(r_u, y_r);
+        y_acc = vmlaq_u16(y_acc, g_u, y_g);
+        y_acc = vmlaq_u16(y_acc, b_u, y_b);
+        uint8x8_t y_val = vqshrn_n_u16(y_acc, 8); // насыщающий сдвиг+сужение до 8 бит
 
-                uint8x8x2_t cb_pairs = vuzp_u8(cb_val, cb_val); 
-                uint8x8x2_t cr_pairs = vuzp_u8(cr_val, cr_val);
-                uint8x8_t cb_down = vrhadd_u8(cb_pairs.val[0], cb_pairs.val[0]); 
-                uint8x8_t cr_down = vrhadd_u8(cr_pairs.val[0], cr_pairs.val[0]); 
+        // Cb/Cr: знаковая арифметика (коэффициенты знакопеременные)
+        int16x8_t b = vreinterpretq_s16_u16(b_u);
+        int16x8_t g = vreinterpretq_s16_u16(g_u);
+        int16x8_t r = vreinterpretq_s16_u16(r_u);
 
-                uint8x8x3_t out_data;
-                out_data.val[0] = vzip_u8(cb_down, cr_down).val[0]; 
-                out_data.val[1] = y_val; 
-                // Управление прозрачностью: Если флаг darken равен true, 
-                // альфа-канал принудительно забивается непрозрачным цветом vmov_n_u8(255)
-                out_data.val[2] = darken ? vmov_n_u8(255) : rgb_data.val[3]; 
+        int16x8_t cb_acc = vmulq_s16(r, cb_r);
+        cb_acc = vmlaq_s16(cb_acc, g, cb_g);
+        cb_acc = vmlaq_s16(cb_acc, b, cb_b);
+        uint8x8_t cb_val = vqmovun_s16(vaddq_s16(vshrq_n_s16(cb_acc, 8), vmovq_n_s16(128)));
 
-                // Критически важный блок: ИСПРАВЛЕНИЕ ВСПЫШЕК:
-                // Если на экране горит системное сообщение (this->mess_exist), а функция вызвана для отрисовки 
-                // обычного виджета (!darken) внутри темной зоны (is_y_inside_dark_zone), инструкция vst3_u8 пропускается.
-                // Данные этого виджета физически не записываются в текущий кадр дисплея. 
-                // Это исключает мигание и артефакты, когда виджет и подложка пытаются одновременно перерисовать 
-                // одну и ту же область экрана.
-                if (darken || !this->mess_exist || !is_y_inside_dark_zone) {
-                vst3_u8(dst, out_data);
+        int16x8_t cr_acc = vmulq_s16(r, cr_r);
+        cr_acc = vmlaq_s16(cr_acc, g, cr_g);
+        cr_acc = vmlaq_s16(cr_acc, b, cr_b);
+        uint8x8_t cr_val = vqmovun_s16(vaddq_s16(vshrq_n_s16(cr_acc, 8), vmovq_n_s16(128)));
+
+        // Субдискретизация 4:2:2 с усреднением соседних пикселей по горизонтали
+        uint8x8x2_t cb_split = vuzp_u8(cb_val, cb_val);
+        uint8x8x2_t cr_split = vuzp_u8(cr_val, cr_val);
+        uint8x8_t cb_down = vrhadd_u8(cb_split.val[0], cb_split.val[1]); // 4 усреднённых значения Cb
+        uint8x8_t cr_down = vrhadd_u8(cr_split.val[0], cr_split.val[1]); // 4 усреднённых значения Cr
+
+        // Собираем итоговую тройку векторов для vst3_u8, дающую при записи
+        // порядок байт Cb0 Y0 A0 Cr0 Y1 A1 Cb1 Y2 A2 Cr1 Y3 A3 ...
+        uint8x8x3_t out_p1;
+        out_p1.val[0] = vzip_u8(cb_down, cr_down).val[0]; // Cb0, Cr0, Cb1, Cr1...
+        out_p1.val[1] = y_val;                            // Y0,  Y1,  Y2,  Y3...
+        // Управление прозрачностью: Если флаг darken равен true, 
+        // альфа-канал принудительно забивается непрозрачным цветом vmov_n_u8(255)
+        out_p1.val[2] = darken ? vmov_n_u8(255) : a_val;                            // A0,  A1,  A2,  A3...
+
+        if (darken || !mess_exist || !is_y_inside_dark_zone) vst3_u8(dst, out_p1);
+        dst += 24;
+
+        // НАКОПЛЕНИЕ КЭША
+        // Если строка пересекается с затемненной плашкой и передан cacheImg, код на лету формирует кэш-картинку:
+        if (cache_line) {
+                // Векторная маска (m_inside): С помощью vcgeq_u16 (больше или равно) и vcltq_u16 (меньше) 
+                // вычисляются глобальные координаты X для каждого из 8 пикселей. 
+                // Проверяется, какие из них попадают внутрь dark_left и dark_right
+                uint16x8_t v_abs_x = vaddq_u16(vmovq_n_u16(screen_x_start + x), v_x_offsets);
+                uint16x8_t m_left = vcgeq_u16(v_abs_x, v_dark_left);
+                uint16x8_t m_right = vcltq_u16(v_abs_x, v_dark_right);
+                uint16x8_t m_inside = vandq_u16(m_left, m_right);
+                uint8x8_t m_inside_u8 = vmovn_u16(m_inside);
+
+                // Затемнение пикселей: Операция vshrn_n_u16(r_u, 1) сдвигает биты вправо на 1. 
+                // В бинарной математике это быстрое деление на 2. 
+                // То есть цвета RGB исходного изображения становятся в два раза темнее.
+                uint8x8_t r_half = vshrn_n_u16(r_u, 1);
+                uint8x8_t g_half = vshrn_n_u16(g_u, 1);
+                uint8x8_t b_half = vshrn_n_u16(b_u, 1);
+
+                int cache_x = (screen_x_start + x) - dark_zone.dark_left;
+                if (cache_x >= 0 && (cache_x + 8) <= dark_zone_width) {
+                        uint8x8x4_t current_cache = vld4_u8(cache_line + cache_x * 4);
+                        uint8x8x4_t out_cache;
+                        // Битовый выбор (vbsl_u8): Инструкция Vector Bitwise Select на основе ранее созданной маски 
+                        // решает:
+                        // Если пиксель внутри зоны — записать в кэш деленный пополам (затемненный) цвет.
+                        // Если пиксель вне зоны — сохранить старый пиксель из кэша (current_cache).
+                        out_cache.val[2] = vbsl_u8(m_inside_u8, r_half, current_cache.val[2]); 
+                        out_cache.val[1] = vbsl_u8(m_inside_u8, g_half, current_cache.val[1]); 
+                        out_cache.val[0] = vbsl_u8(m_inside_u8, b_half, current_cache.val[0]); 
+                        out_cache.val[3] = vmov_n_u8(255); 
+
+                        // Измененные пиксели сохраняются обратно в структуру cacheImg.
+                        vst4_u8(cache_line + cache_x * 4, out_cache);
                 }
-                dst += 24;
-
-                // НАКОПЛЕНИЕ КЭША
-                // Если строка пересекается с затемненной плашкой и передан cacheImg, код на лету формирует кэш-картинку:
-                if (cache_line) {
-                        // Векторная маска (m_inside): С помощью vcgeq_u16 (больше или равно) и vcltq_u16 (меньше) 
-                        // вычисляются глобальные координаты X для каждого из 8 пикселей. 
-                        // Проверяется, какие из них попадают внутрь dark_left и dark_right
-                        uint16x8_t v_abs_x = vaddq_u16(vmovq_n_u16(screen_x_start + x), v_x_offsets);
-                        uint16x8_t m_left = vcgeq_u16(v_abs_x, v_dark_left);
-                        uint16x8_t m_right = vcltq_u16(v_abs_x, v_dark_right);
-                        uint16x8_t m_inside = vandq_u16(m_left, m_right);
-                        uint8x8_t m_inside_u8 = vmovn_u16(m_inside);
-
-                        // Затемнение пикселей: Операция vshrn_n_u16(r_u, 1) сдвигает биты вправо на 1. 
-                        // В бинарной математике это быстрое деление на 2. 
-                        // То есть цвета RGB исходного изображения становятся в два раза темнее.
-                        uint8x8_t r_half = vshrn_n_u16(r_u, 1);
-                        uint8x8_t g_half = vshrn_n_u16(g_u, 1);
-                        uint8x8_t b_half = vshrn_n_u16(b_u, 1);
-
-                        int cache_x = (screen_x_start + x) - dark_zone.dark_left;
-                        if (cache_x >= 0 && (cache_x + 8) <= dark_zone_width) {
-                                uint8x8x4_t current_cache = vld4_u8(cache_line + cache_x * 4);
-                                uint8x8x4_t out_cache;
-                                // Битовый выбор (vbsl_u8): Инструкция Vector Bitwise Select на основе ранее созданной маски 
-                                // решает:
-                                // Если пиксель внутри зоны — записать в кэш деленный пополам (затемненный) цвет.
-                                // Если пиксель вне зоны — сохранить старый пиксель из кэша (current_cache).
-                                out_cache.val[2] = vbsl_u8(m_inside_u8, r_half, current_cache.val[2]); 
-                                out_cache.val[1] = vbsl_u8(m_inside_u8, g_half, current_cache.val[1]); 
-                                out_cache.val[0] = vbsl_u8(m_inside_u8, b_half, current_cache.val[0]); 
-                                out_cache.val[3] = vmov_n_u8(255); 
-
-                                // Измененные пиксели сохраняются обратно в структуру cacheImg.
-                                vst4_u8(cache_line + cache_x * 4, out_cache);
-                        }
-                }
+        }
     }
 
-    
-    // (Скалярный хвост строки оставляем стандартным для записи в dst, без усложнения)
-    // ...
+    // Хвостовой цикл: обрабатываем оставшиеся пиксели (от 0 до 7 штук) скалярно
+    // Это полностью решает проблему с нечетной шириной (например, 131)
+        // Хвостовой цикл: обрабатываем оставшиеся пиксели (от 0 до 7 штук) скалярно
+    for(; x < width; x += 2) {
+        // --- Случай "висящего" последнего нечётного пикселя ---
+        if (x == width - 1) {
+            const uint8_t * p = line + x * 4;
+            uint8_t b = p[0];
+            uint8_t g = p[1];
+            uint8_t r = p[2];
+            uint8_t a = darken ? 255 : p[3];
+
+            int y_val  = (77 * r + 150 * g + 29 * b) >> 8;
+            int cb_val = (((-43 * r - 85 * g + 128 * b) >> 8) + 128);
+            int cr_val = (((128 * r - 107 * g - 21 * b) >> 8) + 128);
+
+            if (darken || !mess_exist || !is_y_inside_dark_zone) {
+                *dst++ = (uint8_t)cb_val;
+                *dst++ = (uint8_t)y_val;
+                *dst++ = a;
+                *dst++ = (uint8_t)cr_val;
+                *dst++ = (uint8_t)y_val;
+                *dst++ = a;
+            } else {
+                dst += 6; // пропускаем запись, но сдвигаем dst как в векторном цикле
+            }
+
+            // Кэш для одиночного хвостового пикселя
+            if (cache_line) {
+                int abs_x = screen_x_start + x;
+                if (abs_x >= dark_zone.dark_left && abs_x < dark_zone.dark_right) {
+                    int cache_x = abs_x - dark_zone.dark_left;
+                    if (cache_x >= 0 && cache_x < dark_zone_width) {
+                        uint8_t * cp = cache_line + cache_x * 4;
+                        cp[2] = r >> 1;
+                        cp[1] = g >> 1;
+                        cp[0] = b >> 1;
+                        cp[3] = 255;
+                    }
+                }
+            }
+            break;
+        }
+
+        // --- Обычная пара пикселей ---
+        const uint8_t * p0 = line + x * 4;
+        const uint8_t * p1 = line + (x + 1) * 4;
+
+        int y0  = (77 * p0[2] + 150 * p0[1] + 29 * p0[0]) >> 8;
+        int cb0 = ((-43 * p0[2] - 85 * p0[1] + 128 * p0[0]) >> 8) + 128;
+        int cr0 = ((128 * p0[2] - 107 * p0[1] - 21 * p0[0]) >> 8) + 128;
+
+        int y1  = (77 * p1[2] + 150 * p1[1] + 29 * p1[0]) >> 8;
+        int cb1 = ((-43 * p1[2] - 85 * p1[1] + 128 * p1[0]) >> 8) + 128;
+        int cr1 = ((128 * p1[2] - 107 * p1[1] - 21 * p1[0]) >> 8) + 128;
+
+        uint8_t cb_avg = (uint8_t)((cb0 + cb1 + 1) >> 1);
+        uint8_t cr_avg = (uint8_t)((cr0 + cr1 + 1) >> 1);
+
+        uint8_t a0 = darken ? 255 : p0[3];
+        uint8_t a1 = darken ? 255 : p1[3];
+
+        if (darken || !mess_exist || !is_y_inside_dark_zone) {
+            *dst++ = cb_avg;
+            *dst++ = (uint8_t)y0;
+            *dst++ = a0;
+
+            *dst++ = cr_avg;
+            *dst++ = (uint8_t)y1;
+            *dst++ = a1;
+        } else {
+            dst += 6;
+        }
+
+        // Кэш для пары пикселей
+        if (cache_line) {
+            for (int k = 0; k < 2; ++k) {
+                const uint8_t * p = (k == 0) ? p0 : p1;
+                int abs_x = screen_x_start + x + k;
+                if (abs_x >= dark_zone.dark_left && abs_x < dark_zone.dark_right) {
+                    int cache_x = abs_x - dark_zone.dark_left;
+                    if (cache_x >= 0 && cache_x < dark_zone_width) {
+                        uint8_t * cp = cache_line + cache_x * 4;
+                        cp[2] = p[2] >> 1; // r_half
+                        cp[1] = p[1] >> 1; // g_half
+                        cp[0] = p[0] >> 1; // b_half
+                        cp[3] = 255;
+                    }
+                }
+            }
+        }
+    }
 }
 
 
-//anton ver похоже нигде не вызывается
+// const int FRAME_WIDTH = 1920;
+// const int FRAME_HEIGHT = 1080;
+// const int STRIDE = 1920 * 3;
+// const size_t FRAME_SIZE = 6221824;
+
+// struct MacroPixel {
+//     unsigned char cb, y0, alpha0, cr, y1, alpha1;
+// };
+
+// void PbxMtvSystem::draw_overlay(QImage *img, int x_offset, int y_offset) {
+// //     if (!m_mmap_base || img.isNull()) return;
+
+//     // Определяем текущий скрытый буфер (Back-Buffer) для записи кадра
+//     int next_write_index = (this->current_buffer_index == 0) ? 1 : 0;
+//     // int nextWriteIndex = 0;
+// //     unsigned char* active_fb_ptr = m_mmap_base + (nextWriteIndex * FRAME_SIZE);
+//     uint8_t* active_fb_ptr = reinterpret_cast<uint8_t*>(buffer + (next_write_index * (video_size / 2)));
+
+//     int img_w = img->width();
+//     int img_h = img->height();
+//     int macro_screen_width = FRAME_WIDTH / 2;
+
+//     // Выставляем альфу: для объекта 5 (зеленый таймер) полупрозрачность, для остальных 100%
+// //     unsigned char custom_alpha = (object_id == 5) ? 64 : 255;
+//     unsigned char custom_alpha = 255;
+
+//     // Выравниваем координату X по сетке макропикселей (шаг 2 пикселя)
+//     int start_macro_x = (x_offset / 2) * 2;
+
+//     // ------------------------------------------------------------------
+//     // ОПТИМИЗИРОВАННАЯ ОТРИСОВКА (БЕЗ ЛИШНЕГО СТИРАНИЯ И МАССИВОВ КООРДИНАТ)
+//     // ------------------------------------------------------------------
+//     for (int src_y = 0; src_y < img_h; ++src_y) {
+//         int dst_y = y_offset + src_y;
+//         if (dst_y < 0 || dst_y >= FRAME_HEIGHT) continue; // Защита по Y
+
+//         const unsigned char* rgb_row = img->constScanLine(src_y);
+//         MacroPixel* dma_row = (MacroPixel*)(active_fb_ptr + (dst_y * STRIDE));
+
+//         for (int src_x = 0; src_x < img_w; src_x += 2) {
+//             int dst_x = start_macro_x + src_x;
+//             if (dst_x < 0 || dst_x >= FRAME_WIDTH - 1) continue; // Защита по X
+
+//             int macro_idx = (dst_x / 2) % macro_screen_width;
+
+//             // 1. Мы достаем чистые RGB байты из памяти Qt для пары пикселей
+//             int idx0 = src_x * 3;
+//             unsigned char r0 = rgb_row[idx0 + 0], g0 = rgb_row[idx0 + 1], b0 = rgb_row[idx0 + 2];
+            
+//             int idx1 = (src_x + 1) * 3;
+//             unsigned char r1 = rgb_row[idx1 + 0], g1 = rgb_row[idx1 + 1], b1 = rgb_row[idx1 + 2];
+
+//             // 2. МАТЕМАТИЧЕСКАЯ ФОРМУЛА КОНВЕРТАЦИИ (Стандарт BT.601)
+//             unsigned char y0 = (unsigned char)((77 * r0 + 150 * g0 + 29 * b0) >> 8);
+//             unsigned char y1 = (unsigned char)((77 * r1 + 150 * g1 + 29 * b1) >> 8);
+
+//             int r_avg = (r0 + r1) >> 1;
+//             int g_avg = (g0 + g1) >> 1;
+//             int b_avg = (b0 + b1) >> 1;
+
+//             unsigned char cb = (unsigned char)(((-43 * r_avg - 85 * g_avg + 128 * b_avg) >> 8) + 128);
+//             unsigned char cr = (unsigned char)(((128 * r_avg - 107 * g_avg - 21 * b_avg) >> 8) + 128);
+
+//             /*Эта математика берет компьютерные значения RGB и пересчитывает их в 
+//             телевизионный стандарт YUV (YCbCr):Y (y0, y1) — это яркость пикселей.cb — это цветоразностный 
+//             сигнал синего цвета (показывает, насколько цвет далек от синего).cr — это цветоразностный 
+//             сигнал красного цвета.*/
+
+//             // Записываем макропиксель напрямую в DDR ПЛИС Arria 10
+//             dma_row[macro_idx] = { cb, y0, custom_alpha, cr, y1, custom_alpha };
+//         }
+//     }
+
+//     this->current_buffer_index = next_write_index;
+//     int ioctl_buffer_idx = this->current_buffer_index;
+//     int result = ioctl(this->overlay_fd, 0x40046D0E, &ioctl_buffer_idx);
+//     if (result < 0) {
+//             qCritical() << "Failed to execute IOCTL FLIP! Error code:" << errno;
+//             return;
+//     }
+// }
+
+
+
+// const int FRAME_WIDTH = 1920; 
+// const int FRAME_HEIGHT = 1080; 
+// const int STRIDE = 1920 * 3; // 1920 пикселей * 3 байта (MacroPixel занимает 6 байт на 2 пикселя)
+// const size_t FRAME_SIZE = 6221824; 
+
+// struct MacroPixel { 
+//     unsigned char cb, y0, alpha0, cr, y1, alpha1; 
+// } __attribute__((packed)); // Гарантируем отсутствие дыр (компиляторного выравнивания)
+
+// void PbxMtvSystem::draw_overlay(QImage *img, int x_offset, int y_offset) {
+//     if (!img || img->isNull()) return;
+
+//     // 1. Переключение буферов
+//     int next_write_index = (this->current_buffer_index == 0) ? 1 : 0; 
+//     // Внимание: проверьте правильность формулы размера буфера (video_size / 2) из вашего оригинального кода
+//     uint8_t* active_fb_ptr = reinterpret_cast<uint8_t*>(buffer + (next_write_index * (video_size / 2))); 
+
+//     int img_w = img->width();
+//     int img_h = img->height();
+
+//     // Выравниваем начальную координату на экране по сетке макропикселей (шаг 2 пикселя) в меньшую сторону
+//     int start_dst_x = (x_offset / 2) * 2; 
+//     unsigned char custom_alpha = 255;
+
+//     // Построчная отрисовка
+// for (int src_y = 0; src_y < img_h; ++src_y) {
+//     int dst_y = y_offset + src_y;
+//     if (dst_y < 0 || dst_y >= FRAME_HEIGHT) continue; // Защита по Y
+
+//     // !!! Кастим строку к uint32_t* для работы с целыми пикселями Format_ARGB32 !!!
+//     const uint32_t* rgb_row = reinterpret_cast<const uint32_t*>(img->constScanLine(src_y));
+//     MacroPixel* dma_row = reinterpret_cast<MacroPixel*>(active_fb_ptr + (dst_y * STRIDE));
+
+//     // Шагаем по оверлею по 2 пикселя
+//     for (int src_x = 0; src_x < img_w; src_x += 2) {
+//         int dst_x = start_dst_x + src_x;
+        
+//         // Защита по X
+//         if (dst_x < 0 || dst_x >= FRAME_WIDTH - 1) continue; 
+
+//         int macro_idx = dst_x / 2; 
+
+//         // 1. Извлекаем цвета первого пикселя (через макросы Qt — это быстро и безопасно)
+//         uint32_t pixel0 = rgb_row[src_x];
+//         unsigned char r0 = qRed(pixel0);
+//         unsigned char g0 = qGreen(pixel0);
+//         unsigned char b0 = qBlue(pixel0);
+
+//         // 2. Извлекаем цвета второго пикселя (с защитой от нечетной ширины)
+//         unsigned char r1 = r0, g1 = g0, b1 = b0;
+//         if (src_x + 1 < img_w) {
+//             uint32_t pixel1 = rgb_row[src_x + 1];
+//             r1 = qRed(pixel1);
+//             g1 = qGreen(pixel1);
+//             b1 = qBlue(pixel1);
+//         }
+
+//         // 3. Конвертация RGB -> YUV (BT.601)
+//         unsigned char y0 = static_cast<unsigned char>((77 * r0 + 150 * g0 + 29 * b0) >> 8);
+//         unsigned char y1 = static_cast<unsigned char>((77 * r1 + 150 * g1 + 29 * b1) >> 8);
+
+//         int r_avg = (r0 + r1) / 2;
+//         int g_avg = (g0 + g1) / 2;
+//         int b_avg = (b0 + b1) / 2;
+
+//         int cb_val = ((-43 * r_avg - 85 * g_avg + 128 * b_avg) >> 8) + 128;
+//         int cr_val = ((128 * r_avg - 107 * g_avg - 21 * b_avg) >> 8) + 128;
+
+//         unsigned char cb = static_cast<unsigned char>(cb_val < 0 ? 0 : (cb_val > 255 ? 255 : cb_val));
+//         unsigned char cr = static_cast<unsigned char>(cr_val < 0 ? 0 : (cr_val > 255 ? 255 : cr_val));
+
+//         // 4. Запись в DDR ПЛИС
+//         dma_row[macro_idx] = { cb, y0, custom_alpha, cr, y1, custom_alpha };
+//     }
+// }
+
+
+//     // 5. Сигнал ПЛИС на переключение кадра (Flip)
+//     this->current_buffer_index = next_write_index;
+//     int ioctl_buffer_idx = this->current_buffer_index;
+//     int result = ioctl(this->overlay_fd, 0x40046D0E, &ioctl_buffer_idx);
+//     if (result < 0) {
+//         qCritical() << "Failed to execute IOCTL FLIP! Error code:" << errno;
+//         return;
+//     }
+// }
+
+
+
+
+//anton ver
 void PbxMtvSystem::draw_overlay(QImage *image, int offset_x, int offset_y)
 {
         // ... (Your standard null-pointer checks and boundary checks remain here) ...
@@ -1231,7 +1615,7 @@ void PbxMtvSystem::draw_overlay(QImage *image, int offset_x, int offset_y)
         int row_stride = 1920 * 3; 
 
         int img_w = image->width();  
-        int img_h = image->height(); 
+        int img_h = image->height();
         int aligned_offset_x = (offset_x / 2) * 2;
 
         if ((offset_x + img_w) > 1920 || (offset_y + img_h) > 1080) {
@@ -1247,11 +1631,11 @@ void PbxMtvSystem::draw_overlay(QImage *image, int offset_x, int offset_y)
     // 2. Render loop using ARM-NEON convert_line
     for (int y = 0; y < image->height(); ++y) {
         int screen_y = y + offset_y;
-        uint8_t * row_start_address = start_address + (screen_y * row_stride);
-        uint8_t * current_row_with_offset = row_start_address + (offset_x * 3);        
+        uint8_t * current_row_with_offset = start_address + (screen_y * row_stride) + (aligned_offset_x * 3);
         
-        convert_line(image, y, img_w, current_row_with_offset, false, aligned_offset_x, screen_y, m_msgImageCache);        
-        
+        convert_line(image, y, image->width(), current_row_with_offset, false, aligned_offset_x, screen_y, m_msgImageCache);
+              
+
     }
 
     // Переключаем активный индекс и делаем физический ioctl flip
@@ -1259,10 +1643,10 @@ void PbxMtvSystem::draw_overlay(QImage *image, int offset_x, int offset_y)
     int ioctl_buffer_idx = this->current_buffer_index;
     int result = ioctl(this->overlay_fd, 0x40046D0E, &ioctl_buffer_idx);
     if (result < 0) {
-        qCritical(category) << ANSI_RED << "Failed to execute IOCTL FLIP! Error code:" << errno << ANSI_RESET;
+        qCritical() << "Failed to execute IOCTL FLIP! Error code:" << errno;
         return;
     }
-//      qDebug(category) << "draw_overlay current_idx" << this->current_buffer_index;
+//     qDebug(category) << "current_idx" << this->current_buffer_index;
 }
 
 // Быстрый путь для мелких, часто меняющихся элементов (секундная стрелка,
@@ -1282,25 +1666,21 @@ void PbxMtvSystem::draw_overlay(QImage *image, int offset_x, int offset_y)
 // элемента (клок раз в 100мс) это не должно быть заметно, а на следующем
 // кадре всё уже консистентно. Если это станет проблемой - придётся уходить
 // на shadow-copy back-buffer (см. обсуждение).
-
-/*Запрещаем обычным виджетам писать в зону плашки done*/
-/*при наличии текста плашка снова становится черной, а тайминг прыгает до 1мс -> 6мс -> 1мс -> 6мс
- (это классический симптом двойной буферизации*/
 void PbxMtvSystem::draw_overlay_fast(QImage *image, int offset_x, int offset_y, bool darken)
 {
     QElapsedTimer timer;
     timer.start();  
 
     if (!image) {
-        qCritical(category) << ANSI_RED << "CRITICAL ERROR: QImage pointer is NULL!" << ANSI_RESET;
+        qCritical() << "CRITICAL ERROR: QImage pointer is NULL!";
         return;
     }
     if (!buffer) {
-        qCritical(category) << ANSI_RED << "CRITICAL ERROR: Output buffer pointer is NULL!" << ANSI_RESET;
+        qCritical() << "CRITICAL ERROR: Output buffer pointer is NULL!";
         return;
     }
     if (image->format() != QImage::Format_ARGB32 && image->format() != QImage::Format_RGB32) {
-        qCritical(category) << ANSI_RED << "WARNING: QImage format is not ARGB32/RGB32! Current format:" << image->format() << ANSI_RESET;
+        qCritical() << "WARNING: QImage format is not ARGB32/RGB32! Current format:" << image->format();
     }
 
     // Сохраняем или сбрасываем кэш ОДИН РАЗ до цикла строк, чтобы сберечь такты CPU
@@ -1310,35 +1690,45 @@ void PbxMtvSystem::draw_overlay_fast(QImage *image, int offset_x, int offset_y, 
         m_msgImageCache = nullptr; 
     }
 
+    // Выравниваем offset_x вниз до чётного - сетка макропикселей Cb/Y/A/Cr/Y/A
+    // завязана на пары колонок, и convert_line всегда начинает писать с фазы Cb.
     int aligned_offset_x = (offset_x / 2) * 2;
-    if ((aligned_offset_x + image->width()) > 1920 || (offset_y + image->height()) > 1080) return;
+
+    Q_ASSERT(image->width() + aligned_offset_x <= 1920);
+    Q_ASSERT(image->height() + offset_y <= 1080);
 
     int row_stride = 1920 * 3;
     int img_w = image->width();
     int img_h = image->height();
+
+    if ((aligned_offset_x + img_w) > 1920 || (offset_y + img_h) > 1080) {
+        qCritical() << "CRITICAL ERROR: Image with offsets goes out of Full HD bounds!";
+        return;
+    }
+
+    // Ключевое отличие от draw_overlay(): берём current_buffer_index
+    // (активный, читаемый FPGA буфер), а не next_write_index.
     uint8_t* start_address = reinterpret_cast<uint8_t*>(buffer + (this->current_buffer_index * (video_size / 2)));
 
     for (int y = 0; y < img_h; ++y) {
         int screen_y = y + offset_y;
-        
-        uint8_t * current_row_with_offset = start_address + (screen_y * row_stride) + (aligned_offset_x * 3);        
-        
-        // // Вызываем прямолинейную быструю конвертацию кадра
+        // aligned_offset_x = 0;
+        uint8_t * current_row_with_offset = start_address + (screen_y * row_stride) + (aligned_offset_x * 3);
+
         convert_line(image, y, img_w, current_row_with_offset, darken, aligned_offset_x, screen_y, m_msgImageCache);
+       
     }
     
-    // Оптимизированный замер времени
-    int64_t current_elapsed = timer.elapsed();
-    const int64_t delta = 2; // Порог чувствительности в миллисекундах
+    
 
-    // Логируем только если разница во времени >= delta
-    if (std::abs(current_elapsed - last_elapsed_time) >= delta && current_elapsed > 0) {
-        qCDebug(category) << ANSI_MAGENTA << "draw_overlay_fast();" << ANSI_RESET
-                        << current_elapsed << "milliseconds" 
-                        << ANSI_MAGENTA "\tcurrent_idx" << ANSI_RESET
-                        << this->current_buffer_index;                             
-        last_elapsed_time = current_elapsed; 
+//     qDebug(category) << "mtvsystem->draw_overlay_fast();" << timer.elapsed() << "milliseconds" << "current_idx" << this->current_buffer_index;
+    int64_t current_elapsed = timer.elapsed();
+    if (current_elapsed != last_elapsed_time && current_elapsed != 0) {
+        qCDebug(category) << ANSI_MAGENTA << "draw_overlay_fast();" << ANSI_RESET << current_elapsed << "ms";       
+        last_elapsed_time = current_elapsed;
     }
+
+    // ioctl FLIP осознанно не делаем - buffer index не меняем.
 }
 
 
@@ -1479,7 +1869,7 @@ int PbxMtvSystem::read_sdi_format(int index)
 void PbxMtvSystem::sdi_format_timeout()
 {
     int state_change = 0;
-        for(int i=0; i<16; i++){  // segmentation fault if 16 in.h  image_config_t image_config[16]; int sdi_format[16];
+        for(int i=0; i<16; i++){
                 int new_format = read_sdi_format(i);
                 int changed = new_format!=sdi_format[i];
                 sdi_format[i] = new_format;

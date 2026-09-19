@@ -38,7 +38,7 @@ public:
         void draw_overlay(QImage * image);
         // void draw_overlay(QImage * image, int offset_x, int offset_y);
         void draw_overlay (QImage *img, int x_offset, int y_offset);
-        void draw_overlay_fast(QImage *image, int offset_x, int offset_y, bool darken = false);
+        void draw_overlay_fast(QImage *image, int offset_x, int offset_y, bool darken);
         void overlay_sync();
         void overlay_sync(int source);
         void configure_image(int index, int width, int height, int x, int y, int enable);
@@ -55,8 +55,6 @@ public:
         void system_set_time(time_t time);
         AncReader * anc_reader;
 
-        PbxMtvSystem();
-        ~PbxMtvSystem();
         bool mess_exist;// = false;
         // структура затемненной области
         struct darken_area_t {
@@ -65,6 +63,9 @@ public:
                 int dark_left = 100;
                 int dark_right = 1820;
         };
+
+        PbxMtvSystem();
+        ~PbxMtvSystem();
 private:
         QTimer sdi_format_timer;
         QTimer sdi_format_notify_timer;
@@ -85,7 +86,7 @@ private:
         QRgb rgb_to_ycrcb(QRgb value);
         QImage * image_to_prpb(QImage * image);
         int limit_color(int value);
-        void convert_line(QImage * img, int y, int width, uint8_t * buffer, bool darken, int screen_x_start, int screen_y, QImage * msgImg);
+        void convert_line(QImage * img, int y, int width, uint8_t * buffer, bool darken, int screen_x_start, int screen_y, QImage * cacheImg);
         int read_sdi_format(int index);
         void reconfigure_image(int index);
         video_format_t * get_video_format(int id);
@@ -104,8 +105,7 @@ private:
         bool m_rw; // Флаг для хранения состояния режима read write str-mem disabled
         int current_buffer_index;
         int64_t last_elapsed_time = -1; // чтобы не сыпал в терминал
-        QImage* m_msgImageCache = nullptr;        
-        
+        QImage* m_msgImageCache = nullptr;
 private slots:
         void slot_fps_hardware_trigger();
 private Q_SLOTS:

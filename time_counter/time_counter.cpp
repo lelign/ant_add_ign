@@ -7,7 +7,7 @@ Time_counter::Time_counter(QObject *parent) : QObject(parent)
     qCDebug(category) << "creating...";
 
     time_count = 0;
-    timer_time_couter.setInterval(1000);
+    timer_time_couter.setInterval(100);  // timer 1 sec = 1000
     connect(&timer_time_couter, &QTimer::timeout, this, &Time_counter::slot_timeout);
 }
 
@@ -23,13 +23,16 @@ QString Time_counter::timeConversion(qint64 secs)
 {
     QString formattedTime;
 
-    int hours   = (secs / 60 / 60);
-    int minutes = (secs / 60) % 60;
-    int seconds =  secs  % 60;
+    int hours   = (secs / 60 / 60 / 10);
+    int minutes = (secs / 60 / 10) % 60;
+    int seconds =  (secs / 10)  % 60;
+    int mili_seconds =  secs  % 10;
 
     formattedTime.append(QString("%1"  ).arg(hours,   2, 10, QLatin1Char('0')) + ":" +
                          QString( "%1" ).arg(minutes, 2, 10, QLatin1Char('0')) + ":" +
-                         QString( "%1" ).arg(seconds, 2, 10, QLatin1Char('0')));
+                         QString( "%1" ).arg(seconds, 2, 10, QLatin1Char('0')) + "." +
+                         QString( "%1" ).arg(mili_seconds, 1, 10, QLatin1Char('0'))
+                        );
 
     return formattedTime;
 }

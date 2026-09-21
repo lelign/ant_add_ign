@@ -27,6 +27,11 @@
 
 #include "hardware_diagnostics/hardware_diagnostics.h"
 
+
+#include <QThread> // for audio_emulator
+#include "../audio_emulator/emulator.h" // for audio_emulator
+
+
 #define CASCADE_NUM 4 // кол-во блоков в каскаде
 
 class Layout : public QObject
@@ -253,11 +258,14 @@ public:
 
     QImage q_image_cache_file; // Буфер накопления фона подложки
 
+    int public_audio_levels[64] = {0}; // generate by audio_emulator
+
 private:
     QImage *image_clock;
     QTimer timer_update_alarm;
     QTimer timer_update_op47;
     QTimer timer_analog_clock;      // для плавного хода секундной стрелки (чаще 1 раза в секунду)
+    QTimer timer_audio_meters;
 
     QSvgRenderer m_clock_face;
     QImage       m_clock_face_cache;   // циферблат не меняется - рендерим SVG один раз, дальше просто копируем
@@ -353,6 +361,21 @@ private:
 
     Hardware_diagnostics *hardware_diagnostics_layout;
 
+    // for audio_meters
+    struct VideoExistStruct {
+                            bool channels[16] = {false}; // По умолчанию видео нигде нет
+                            } video_exist;
+
+    void parseVideoExistFile(const QString &filePath); // file video_exist on board do: seq -s . 1 3 > video_exist (1.2.3) // or seq -s . 16 > video_exist (1.2....16)
+
+    QThread* m_emulatorThread; // audio_emulator generate int public_audio_levels[64]
+    AudioEmulatorWorker* m_emulatorWorker; 
+
+    void draw_audio_meters();
+    // Локальная функция рисования отдельного светодиодного бара на QImage
+    void drawSingleBar(QPainter &painter, double level, int x_offset, int y_offset, int width, int height);
+    bool trigger = false;
+
 signals:
     void signal_solo(solo_mode_t solo_mode);
     void signal_preset(int preset_number);
@@ -364,6 +387,7 @@ signals:
 private slots:
     void slot_fan_state(int fan_state);
     void slot_over_temperature(QString str);
+    void onLevelsUpdated(const QVector<int> &levels); // audio_emulator
 
 public slots:
     void slot_new_format();

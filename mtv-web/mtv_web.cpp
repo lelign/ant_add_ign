@@ -1242,14 +1242,14 @@ static const char *eth0="eth0";
             if(netInterface.name() == "eth0")   {                
                 network_0.mac = netInterface.hardwareAddress();
                 // ign added get ip
-                if (netInterface.hardwareAddress().toUpper() == network_0.mac.toUpper()) {
-                    QList<QHostAddress> entries = netInterface.allAddresses();
-                    for (const QHostAddress &entry : entries) {
-                        if(!entry.isLoopback() && entry.protocol() == QAbstractSocket::IPv4Protocol){
-                            qDebug(category) << "\tconnected IP:" << entry.toString() << "MAC" << network_0.mac;
-                        }
-                    }
-                }    
+                // if (netInterface.hardwareAddress().toUpper() == network_0.mac.toUpper()) {
+                //     QList<QHostAddress> entries = netInterface.allAddresses();
+                //     for (const QHostAddress &entry : entries) {
+                //         if(!entry.isLoopback() && entry.protocol() == QAbstractSocket::IPv4Protocol){
+                //             qDebug(category) << "\tconnected IP:" << entry.toString() << "MAC" << network_0.mac;
+                //         }
+                //     }
+                // }    
             }
         }
     }

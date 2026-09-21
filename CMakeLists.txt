@@ -93,6 +93,7 @@ add_executable(pbx-mtv-5161
     vgpi_server/vgpi_server.cpp
     vgpi_api/vgpi_api.cpp
     remote_ctrl_preset/remote_ctrl_preset.cpp
+    audio_emulator/emulator.cpp
 )
 
 # Индивидуальные макросы для конкретной цели

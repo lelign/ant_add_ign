@@ -12,6 +12,8 @@
 #include <fstream> // for js
 #include <QCoreApplication>
 
+#include <cmath> // Для std::abs
+
 //static QLoggingCategory category("SYSTEM");
 static QLoggingCategory category("\033[34m MTV-SYSTEM\033[0m"); // ign blue
 
@@ -1592,6 +1594,7 @@ void PbxMtvSystem::draw_overlay(QImage *image, int offset_x, int offset_y)
 {
         // ... (Your standard null-pointer checks and boundary checks remain here) ...
         // 1. ЗАЩИТА ОТ NULL-УКАЗАТЕЛЕЙ
+        QMutexLocker locker(&m_mutex_draw); 
         if (!image) {
                 qCritical() << "CRITICAL ERROR: QImage pointer is NULL!";
                 return;
@@ -1668,6 +1671,7 @@ void PbxMtvSystem::draw_overlay(QImage *image, int offset_x, int offset_y)
 // на shadow-copy back-buffer (см. обсуждение).
 void PbxMtvSystem::draw_overlay_fast(QImage *image, int offset_x, int offset_y, bool darken)
 {
+    QMutexLocker locker(&m_mutex_draw_fast); 
     QElapsedTimer timer;
     timer.start();  
 
@@ -1723,10 +1727,29 @@ void PbxMtvSystem::draw_overlay_fast(QImage *image, int offset_x, int offset_y, 
 
 //     qDebug(category) << "mtvsystem->draw_overlay_fast();" << timer.elapsed() << "milliseconds" << "current_idx" << this->current_buffer_index;
     int64_t current_elapsed = timer.elapsed();
-    if (current_elapsed != last_elapsed_time && current_elapsed != 0) {
-        qCDebug(category) << ANSI_MAGENTA << "draw_overlay_fast();" << ANSI_RESET << current_elapsed << "ms";       
+
+        if (current_elapsed != 0) {
+        int64_t current_delta = current_elapsed - last_elapsed_time;
+        static int64_t last_delta = 0; 
+        
+        // Вводим порог чувствительности (например, 5 мс). 
+        // Всё, что прыгает меньше этого значения, лог будет игнорировать.
+        int64_t delta_change = std::abs(current_delta - last_delta);
+        
+        // Логируем только если разница между дельтами СУЩЕСТВЕННА (например, > 5 мс)
+        // ИЛИ если само время выполнения стало аномально большим (например, > 15 мс)
+        if ((delta_change > 15 && last_elapsed_time != 0) || current_elapsed > 15) {
+                
+                qCDebug(category) << ANSI_MAGENTA << "draw_overlay_fast();" << ANSI_RESET 
+                                << "Elapsed:" << current_elapsed << "ms,"
+                                << "Delta:" << current_delta << "ms";       
+                
+                last_delta = current_delta;
+        }
+        
         last_elapsed_time = current_elapsed;
-    }
+
+        }
 
     // ioctl FLIP осознанно не делаем - buffer index не меняем.
 }
@@ -2109,7 +2132,7 @@ QList<int> PbxMtvSystem::get_audio_level()
 {
         QList<int> ret;
 
-        for(int q=0; q<32; q++){
+        for(int q=0; q<64; q++){ // ign 8*4=32 chnge to 16*4=64
                 int i = q;
                 uint32_t value = reg_read(REG_BARS, i);
                 if(get_sdi_status(q/4))

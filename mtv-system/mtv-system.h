@@ -10,9 +10,12 @@
 #include <QElapsedTimer>
 #include <nlohmann/json.hpp> // jq
 
+#include <QMutex> // close the door
+
 #define ANSI_MAGENTA  "\033[35m" //colorised output
 #define ANSI_RED  "\033[31m" //colorised output
 #define ANSI_RESET  "\033[0m"
+#define ANSI_YELLOW  "\033[33m"
 
 typedef struct {
         int id;
@@ -106,6 +109,9 @@ private:
         int current_buffer_index;
         int64_t last_elapsed_time = -1; // чтобы не сыпал в терминал
         QImage* m_msgImageCache = nullptr;
+
+        QMutex m_mutex_draw; // close the door
+        QMutex m_mutex_draw_fast; // close the door
 private slots:
         void slot_fps_hardware_trigger();
 private Q_SLOTS:

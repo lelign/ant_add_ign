@@ -497,7 +497,7 @@ void Mtv_web::parser_sdi_input_label(QJsonArray jsonArray)
             break;
         layout->layout_object[i].sdi_label = jsonArray[i].toString();
     }
-    qDebug(category) << "486 int layout_object_size : " << layout_object_size;
+    // qDebug(category) << "486 int layout_object_size : " << layout_object_size;
 }
 /*---------------------------------------------------------------------------*/
 void Mtv_web::apply_new_conig()

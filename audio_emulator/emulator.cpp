@@ -42,8 +42,8 @@ void AudioEmulatorWorker::startEmulation()
             }
 
             // Масштабируем double (0.0 - 1.0) в int (0 - 100%).
-            // Если вам нужен диапазон 0-255, умножайте на 255.0
-            int_levels[i] = static_cast<int>(current_levels[i] * 100.0);
+            // int_levels[i] = static_cast<int>(current_levels[i] * 100.0); // 0-100
+            int_levels[i] = static_cast<int>(current_levels[i] * 255.0); //диапазон 0-255
         }
         // check generating
         // qDebug() << "[Workers: Ch1 =" << int_levels[0] << "Ch2 =" << int_levels[1];
@@ -59,7 +59,11 @@ void AudioEmulatorWorker::startEmulation()
     emit finished();
 }
 
+
+
+
 void AudioEmulatorWorker::stopEmulation()
 {
     m_running = false;
 }
+

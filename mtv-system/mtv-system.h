@@ -63,8 +63,8 @@ public:
         struct darken_area_t {
                 int dark_top = 440;
                 int dark_bottom = 640;
-                int dark_left = 100;
-                int dark_right = 1820;
+                int dark_left = 4;
+                int dark_right = 1916;
         };
 
         PbxMtvSystem();
@@ -112,6 +112,7 @@ private:
 
         QMutex m_mutex_draw; // close the door
         QMutex m_mutex_draw_fast; // close the door
+        bool draw_overlay_run = false;
 private slots:
         void slot_fps_hardware_trigger();
 private Q_SLOTS:

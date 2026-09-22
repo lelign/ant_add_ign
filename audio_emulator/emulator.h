@@ -18,6 +18,7 @@ public slots:
 signals:
     // Сигнал, который будет раз в 100 мс передавать новые уровни в основной поток
     void levelsUpdated(const QVector<int> &levels);
+    // void levelsUpdated(QVector<QString> levels); // 0-255 hex
     void finished();
 
 private:

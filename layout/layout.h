@@ -30,6 +30,7 @@
 
 #include <QThread> // for audio_emulator
 #include "../audio_emulator/emulator.h" // for audio_emulator
+#include <cstdint> // for audio_emulator uint8_t 
 
 
 #define CASCADE_NUM 4 // кол-во блоков в каскаде
@@ -258,7 +259,8 @@ public:
 
     QImage q_image_cache_file; // Буфер накопления фона подложки
 
-    int public_audio_levels[64] = {0}; // generate by audio_emulator
+    // int public_audio_levels[64] = {0}; // generate by audio_emulator
+    uint8_t public_audio_levels[64] = {0}; // generate by audio_emulator Массив из 64 байт for FPGA
 
 private:
     QImage *image_clock;
@@ -373,8 +375,16 @@ private:
 
     void draw_audio_meters();
     // Локальная функция рисования отдельного светодиодного бара на QImage
-    void drawSingleBar(QPainter &painter, double level, int x_offset, int y_offset, int width, int height);
+    void drawSingleBar(QPainter &painter, int level, int peakLevel, int x_offset, int y_offset, int width, int height);
+    // int public_audio_levels[64] = {0};       // Сюда пишем данные из эмулятора (цель)
+    double smoothed_audio_levels[64] = {0.0}; // Отсюда берем данные для рисования (сглаженные)
+    // MАССИВЫ ДЛЯ ПИКА:
+    double peak_audio_levels[64] = {0.0};    // Высота пиковой полоски
+    int peak_hold_ticks[64] = {0};           // Время удержания пика (в кадрах)
+    
     bool trigger = false;
+
+    void printLevelsToHex(); // not used for debug with FPGA
 
 signals:
     void signal_solo(solo_mode_t solo_mode);
@@ -388,6 +398,8 @@ private slots:
     void slot_fan_state(int fan_state);
     void slot_over_temperature(QString str);
     void onLevelsUpdated(const QVector<int> &levels); // audio_emulator
+    // void onLevelsUpdated(QVector<QString> levels); // audio_emulator 0-255 hex
+    
 
 public slots:
     void slot_new_format();

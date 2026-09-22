@@ -1593,8 +1593,12 @@ void PbxMtvSystem::convert_line(QImage * img, int y, int width, uint8_t * buffer
 void PbxMtvSystem::draw_overlay(QImage *image, int offset_x, int offset_y)
 {
         // ... (Your standard null-pointer checks and boundary checks remain here) ...
-        // 1. ЗАЩИТА ОТ NULL-УКАЗАТЕЛЕЙ
+        QElapsedTimer timer;
+        timer.start();
+        draw_overlay_run = true;
         QMutexLocker locker(&m_mutex_draw); 
+        // 1. ЗАЩИТА ОТ NULL-УКАЗАТЕЛЕЙ
+       
         if (!image) {
                 qCritical() << "CRITICAL ERROR: QImage pointer is NULL!";
                 return;
@@ -1649,6 +1653,32 @@ void PbxMtvSystem::draw_overlay(QImage *image, int offset_x, int offset_y)
         qCritical() << "Failed to execute IOCTL FLIP! Error code:" << errno;
         return;
     }
+
+    int64_t current_elapsed = timer.elapsed();
+
+        if (current_elapsed != 0) {
+        int64_t current_delta = current_elapsed - last_elapsed_time;
+        static int64_t last_delta = 0; 
+        
+        // Вводим порог чувствительности (например, 5 мс). 
+        // Всё, что прыгает меньше этого значения, лог будет игнорировать.
+        int64_t delta_change = std::abs(current_delta - last_delta);
+        
+        // Логируем только если разница между дельтами СУЩЕСТВЕННА (например, > 5 мс)
+        // ИЛИ если само время выполнения стало аномально большим (например, > 15 мс)
+        if ((delta_change > 15 && last_elapsed_time != 0) || current_elapsed > 15) {
+                
+                qCDebug(category) << ANSI_MAGENTA << "draw_overlay" << ANSI_RESET 
+                                << "Elapsed:" << current_elapsed << "ms,"
+                                << "Delta:" << current_delta << "ms";       
+                
+                last_delta = current_delta;
+        }
+        
+        last_elapsed_time = current_elapsed;
+
+        }
+    draw_overlay_run = false;
 //     qDebug(category) << "current_idx" << this->current_buffer_index;
 }
 
@@ -1671,6 +1701,7 @@ void PbxMtvSystem::draw_overlay(QImage *image, int offset_x, int offset_y)
 // на shadow-copy back-buffer (см. обсуждение).
 void PbxMtvSystem::draw_overlay_fast(QImage *image, int offset_x, int offset_y, bool darken)
 {
+        if(draw_overlay_run) return;
     QMutexLocker locker(&m_mutex_draw_fast); 
     QElapsedTimer timer;
     timer.start();  
@@ -1740,7 +1771,7 @@ void PbxMtvSystem::draw_overlay_fast(QImage *image, int offset_x, int offset_y, 
         // ИЛИ если само время выполнения стало аномально большим (например, > 15 мс)
         if ((delta_change > 15 && last_elapsed_time != 0) || current_elapsed > 15) {
                 
-                qCDebug(category) << ANSI_MAGENTA << "draw_overlay_fast();" << ANSI_RESET 
+                qCDebug(category) << ANSI_MAGENTA << "draw_overlay_fast()" << ANSI_RESET 
                                 << "Elapsed:" << current_elapsed << "ms,"
                                 << "Delta:" << current_delta << "ms";       
                 

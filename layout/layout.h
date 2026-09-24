@@ -386,12 +386,15 @@ private:
 
     void printLevelsToHex(); // not used for debug with FPGA
    
-    // заполнение darken_background
+    // заполнение darken_background для восстановления после снятия Warning
     void save_darken_background(QImage *img, int x_offset, int y_offset);
     QImage m_savedBackground;
+    void mergeClockWithSavedBackground(int offset_x, int offset_y); // сложение циферблата ан.часов с m_savedBackground
 
-    // удаление лишнего шлюза 192.168.0.1 если сработал DHCP 
+    // удаление лишнего шлюза 192.168.0.1 если сработал DHCP
     void cleanRoutingTable();
+
+    int warning_delay = 5000; // как часто можно выводить Warning, доолно быть минимум 60000 (1 минута)
 
 signals:
     void signal_solo(solo_mode_t solo_mode);

@@ -1991,6 +1991,7 @@ void Layout::draw_analog_clock()
         face_painter.setRenderHint(QPainter::Antialiasing);
         m_clock_face.render(&face_painter);
         face_painter.end();
+        mergeClockWithSavedBackground(clock_rec.x(), clock_rec.y()); // добавляем циферблат к m_savedBackground
     }
 
     QImage image_clock = m_clock_face_cache;
@@ -2839,6 +2840,8 @@ void Layout::draw_message_box_overlay(const QColor &color, QString trouble)
 
     PbxMtvSystem::darken_area_t dark{};
 
+    static bool trigger_debug = true;
+
    
     int crop_width  = dark.dark_right  - dark.dark_left;
     int crop_height = dark.dark_bottom - dark.dark_top;
@@ -2896,9 +2899,13 @@ void Layout::draw_message_box_overlay(const QColor &color, QString trouble)
     // restore cells under semi-transparent substrate
     if(trouble.isEmpty() && !mtvsystem->mess_exist){
        
-       mtvsystem->draw_overlay_fast(&m_savedBackground, dark.dark_left, dark.dark_top, false);
-       qCDebug(category) << ANSI_YELLOW << "draw_message_box_overlay() m_savedBackground.size()" << ANSI_RESET << m_savedBackground.size();
-        
+       mtvsystem->draw_overlay_fast(&m_savedBackground, dark.dark_left, dark.dark_top, false);  
+
+        if(trigger_debug) {
+            trigger_debug = false;
+            qCDebug(category) << ANSI_YELLOW << "draw_message_box_overlay() m_savedBackground.size()" << ANSI_RESET << m_savedBackground.size();
+       }
+
     }
         
     
@@ -2968,6 +2975,7 @@ void Layout::slot_fan_state(int fan_state)
     if(mtvsystem->mess_exist){
         return; // какое-то сообщение уже выводится 
     }
+    static bool debug_trigger = true;
     static QElapsedTimer timer;
     
     // Если таймер не запущен, запускаем его. 
@@ -2980,7 +2988,11 @@ void Layout::slot_fan_state(int fan_state)
 
     // Код выполняется раз в 60 секунд
     QString str = fan_state ? "Fan Status: OK" : "Fan Status: FAULT";
-    qCDebug(category) << QString("slot_fan_state %1 %2").arg(fan_state).arg(str);
+    if(debug_trigger){
+        debug_trigger = false;
+        qCDebug(category) << QString("slot_fan_state %1 %2").arg(fan_state).arg(str);
+    }
+   
     
     m_highlightColor = QColor("#FFA726"); // Пастельный мандариновый (Soft Tangerine)// Qt::yellow; 
     trouble = "fan fault";
@@ -2991,13 +3003,13 @@ void Layout::slot_fan_state(int fan_state)
             mtvsystem->mess_exist = true;        
         }
       
-        QTimer::singleShot(5000, this, [this]() {
+        QTimer::singleShot(warning_delay, this, [this]() {
             if (mtvsystem) {
                 mtvsystem->mess_exist = false;            
             }
 
             trouble = QString();
-            // ТОЛЬКО ЗДЕСЬ (через 5 секунд) 
+            // ТОЛЬКО ЗДЕСЬ 
             // Вызываем отрисовку — функция сама поймет, что флаг false, и скроет текст            
             draw_message_box_overlay(m_highlightColor, trouble);
         });
@@ -3363,4 +3375,59 @@ void Layout::cleanRoutingTable()
     } else {
         qDebug() << "[NETWORK] Route check complete (no deletion required or gateway missing)";
     }
+}
+void Layout::mergeClockWithSavedBackground(int offset_x, int offset_y)
+{
+    // int сlock_rec.x(), int clock_rec.y()
+    // 1. Проверяем входные кэши на валидность
+    if (m_clock_face_cache.isNull() || m_savedBackground.isNull()) {
+        return;
+    }
+
+    PbxMtvSystem::darken_area_t darkArea;
+
+    // 2. Создаем QRect для зоны затемнения (глобальные координаты экрана)
+    int dark_w = darkArea.dark_right - darkArea.dark_left;
+    int dark_h = darkArea.dark_bottom - darkArea.dark_top;
+    QRect darkRect(darkArea.dark_left, darkArea.dark_top, dark_w, dark_h);
+
+    // 3. Создаем QRect для часов (используем ваши clock_rec.x() и clock_rec.y())
+    QRect clockRect(offset_x, offset_y, 
+                    m_clock_face_cache.width(), m_clock_face_cache.height());
+
+    // 4. Находим пересечение (глобальное) между темной зоной и часами
+    QRect globalIntersection = darkRect.intersected(clockRect);
+
+    // Если часы вообще не пересекаются с темной зоной, делать нечего
+    if (globalIntersection.isEmpty()) {
+        return; 
+    }
+
+    // 5. Переводим глобальные координаты пересечения в ЛОКАЛЬНЫЕ координаты часов
+    int local_x = globalIntersection.x() - clockRect.x();
+    int local_y = globalIntersection.y() - clockRect.y();
+    
+    // Вырезаем точную часть циферблата, которая попала в беду
+    QImage clockPart = m_clock_face_cache.copy(local_x, local_y, 
+                                               globalIntersection.width(), 
+                                               globalIntersection.height());
+
+    // 6. Переводим глобальные координаты пересечения в ЛОКАЛЬНЫЕ координаты m_savedBackground
+    // Так как m_savedBackground начинается с точки (darkArea.dark_left, darkArea.dark_top)
+    int target_x_in_bg = globalIntersection.x() - darkArea.dark_left;
+    int target_y_in_bg = globalIntersection.y() - darkArea.dark_top;
+
+    // 7. Объединяем (конкатенируем) картинки с помощью QPainter
+    // Рисуем вырезанную часть часов ПОВЕРХ сохраненного фона m_savedBackground
+    QPainter painter(&m_savedBackground);
+    
+    // Если у часов есть прозрачность (альфа-канал), этот режим корректно наложит их на фон
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver); 
+    
+    painter.drawImage(target_x_in_bg, target_y_in_bg, clockPart);
+    painter.end(); // Завершаем рисование, чтобы сохранить изменения в m_savedBackground
+
+    qCDebug(category) << ANSI_YELLOW << "clock's part added into m_savedBackground:" 
+                    << ANSI_RESET
+                    << target_x_in_bg << target_y_in_bg;
 }

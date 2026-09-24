@@ -281,7 +281,7 @@ private:
     QImage  image_sound;
     QImage  image_teletext;
     QImage get_layout_1x1(int index);
-    QImage get_layout();
+    QImage get_layout(bool restore); // added boolean restore for diff mode
     void get_grid_size();
     void set_cell_plane_old_style(layout_object_t &cell_object);
     void disable_all_audio_meters();
@@ -385,6 +385,10 @@ private:
     bool trigger = false;
 
     void printLevelsToHex(); // not used for debug with FPGA
+   
+    // заполнение darken_background
+    void save_darken_background(QImage *img, int x_offset, int y_offset);
+    QImage m_savedBackground;
 
 signals:
     void signal_solo(solo_mode_t solo_mode);

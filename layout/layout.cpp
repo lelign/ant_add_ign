@@ -611,6 +611,8 @@ void Layout::slot_new_format()
     routing_source_video();
     update_alarm();
 
+
+
     for(int i = 0; i < 16; ++i){
         int k = cascade.num * 16 + i;
         layout_object[k].sdi_format_str = mtvsystem->get_sdi_format_str(i);
@@ -620,7 +622,7 @@ void Layout::slot_new_format()
     }
 }
 
-void Layout::update_label_name_channel(int addr, QString txt)
+void Layout::update_label_name_channel(int addr, QString txt)  // resume Input 1.XX
 {
 QString label;
 int width, height;
@@ -663,14 +665,14 @@ int x, y;
         draw_old_style_text_panel(image_label_panel, panel, layout_object[addr].screen_old_style.panel_label.font, label);
     else
         draw_transparant_text_panel(image_label_panel, panel, FONT_CHANNEL_NAME_SIZE, Qt::AlignCenter, label);
-
     blit_to_frame(&image_label_panel, x, y);
-    qDebug() << "update_label_name_channel";
+    // qDebug() << "update_label_name_channel";
     // flush_overlay();
+    
     mtvsystem->draw_overlay_fast(&image_label_panel, x, y, false);
 }
 
-void Layout::update_sdi_format(int index)
+void Layout::update_sdi_format(int index) // resume LOSS
 {
     int k = cascade.num * 16 + index;
     if(!layout_object[k].screen_plan.enable_video) return;
@@ -739,19 +741,27 @@ static int output_format_old = -1;
     }
 
     trigger = true; // audio_meter debug 
+
+    // очистить список пересечений с darken_area_t 
+    // m_imagesToRestore.clear();
+
     QElapsedTimer timer;
     timer.start();
     qDebug(category) << "====== Start Measuring ==========";
         if(solo_mode.enable)
             layout_border = get_layout_1x1(solo_mode.input);
         else
-            layout_border = get_layout();
+            layout_border = get_layout(false); // restore = false
 
     qDebug(category) << "The get_layout_3x3 operation took" << timer.elapsed() << "milliseconds";
 
         
     
     blit_to_frame(&layout_border, 0, 0);
+    
+    // делаем снимок экрана на пересечении с областью PbxMtvSystem::darken_area_t
+    save_darken_background(&layout_border, 0, 0);
+
 
     qDebug(category) << "The blit_to_frame operation took" << timer.elapsed() << "milliseconds";
 
@@ -797,15 +807,15 @@ static int output_format_old = -1;
     });
 }
 
-void Layout::draw_overlay_test_file()
-{
-    QImage overlay_test_file("layout.png");
-    blit_to_frame(&overlay_test_file, 0, 0);
-    qDebug() << "draw_overlay_test_file";
-    flush_overlay();
-    // mtvsystem->draw_overlay(&overlay_test_file);
-    // mtvsystem->overlay_sync();
-}
+// void Layout::draw_overlay_test_file()
+// {
+//     QImage overlay_test_file("layout.png");
+//     blit_to_frame(&overlay_test_file, 0, 0);
+//     qDebug() << "draw_overlay_test_file";
+//     flush_overlay();
+//     // mtvsystem->draw_overlay(&overlay_test_file);
+//     // mtvsystem->overlay_sync();
+// }
 
 void Layout::set_aspect_ratio(QRect &rec, int index)
 {
@@ -836,8 +846,6 @@ int Layout::draw_text_icon(QImage &image,  QRect panel, QString text)
 {
     if(text.size() == 0) return 0;
 
-    static bool trigger = true;
-
     int FontSize = 10;
 
     QPainter painter(&image);
@@ -862,16 +870,12 @@ int Layout::draw_text_icon(QImage &image,  QRect panel, QString text)
 
     painter.end();
 
-    if(trigger){
-        qCDebug(category) << ANSI_YELLOW << "draw_text_icon();" << ANSI_RESET << text;
-        trigger = false;
-     }
+    
     return rec.width() + 2;
 }
 
 void Layout::draw_old_style_text_panel(QImage &image,  QRect panel, QFont font, QString text)
 {
-    static bool trigger = true;
      QFontMetrics fm(font);
      float factor = (float)panel.width() / (float)fm.horizontalAdvance(text);
 
@@ -884,10 +888,7 @@ void Layout::draw_old_style_text_panel(QImage &image,  QRect panel, QFont font, 
 
      painter.drawText(panel, Qt::AlignCenter, text);
      painter.end();
-     if(trigger){
-        qCDebug(category) << ANSI_YELLOW << "draw_old_style_text_panel" << ANSI_RESET << text;
-        trigger = false;
-     }
+     
      
 }
 
@@ -1472,66 +1473,80 @@ void Layout::get_grid_size()
 }
 
 
-QImage Layout::get_layout()
+QImage Layout::get_layout(bool restore)
 {
     
+    
+if (!restore){
     get_grid_size();
-
     set_time_counter_plane();
     set_label_plane();
     set_layout_plane();
     set_teletext_plane(layout_object[0].screen_plan.cell);
     set_clock_plane();
+}
+    
 
     if(STAND_ALONE < cascade.mode && cascade.mode < CASCADE_SLAVE)
         layout_object[15].cell.enable = 0;
 
     QImage image(1920, 1080, QImage::Format_ARGB32);
 
-    parseVideoExistFile("/home/root/video_exist"); // ign
-    for(int i = 0; i < 16; ++i){
-        int k = cascade.num * 16 + i;
-        layout_object[k].screen_plan.enable_video = layout_object[k].cell.enable;
-        if(layout_object[k].screen_plan.enable_video)
-            draw_layout_object(image, layout_object[k]);
-            if(video_exist.channels[k]){
+    if(true){ // parse video_exist & fill 
+        parseVideoExistFile("/home/root/video_exist"); // ign    
+        for(int i = 0; i < 16; ++i){
+            int k = cascade.num * 16 + i;
+            layout_object[k].screen_plan.enable_video = layout_object[k].cell.enable;
+            if(layout_object[k].screen_plan.enable_video)
+                draw_layout_object(image, layout_object[k]); // here restore labels and grid
+                if(video_exist.channels[k]){
+                    
+                    // Вычисляем размер массива                
+                    int arraySize = SizeOfArray(layout_object[k].cell.audio_alarm_channel_enable);
+
+                    // Создаем QVector, передавая указатель на начало массива и на его конец (начало + размер)
+                    QVector<int> debugVector(layout_object[k].cell.audio_alarm_channel_enable, 
+                                            layout_object[k].cell.audio_alarm_channel_enable + arraySize);
+
+                    /*// for debuggging only
+                    // int ch1 = debugVector[0];
+                    // int ch2 = debugVector[1]; 
+                    // int ch3 = debugVector[2];
+                    // int ch4 = debugVector[3];
+                    // int base = i * 4; // Базовое смещение
+                    // int ch1_val = this->public_audio_levels[base + 0];
+                    // int ch2_val = this->public_audio_levels[base + 1];
+                    // int ch3_val = this->public_audio_levels[base + 2];
+                    // int ch4_val = this->public_audio_levels[base + 3];             
+
+                    // qCDebug(category) << ANSI_YELLOW << "get_layout" << ANSI_RESET << k
+                    //             // << "input" << layout_object[k].cell.input
+                    //             << "au_Bars:" <<layout_object[k].cell.audio_meter  // Cell Parameters Audio Bars 1=Single 2=Dual 0=off
+                    //             << "x:" << layout_object[k].cell.x // 0 -11
+                    //             << "y:" << layout_object[k].cell.y // 0 -11
+                    //             << "scale_x:" << layout_object[k].cell.scale_x
+                    //             << "scale_y:" << layout_object[k].cell.scale_y
+                    //             << "au_alarm.enbl:" << layout_object[k].cell.audio_alarm.enable // Audio Silence 0=enable 1=disssable
+                    //             // << "audio_alarm_channel_enable" << layout_object[k].cell.audio_alarm_channel_enable // 0x14d7ef8
+                    //             << "ch1:" << ch1 << ch1_val << "ch2:" << ch2 << ch2_val << "ch3:" << ch3<< ch3_val << "ch4:" << ch4 << ch4_val;   */
+                                                                                       
+                }
                 
-                // Вычисляем размер массива                
-                int arraySize = SizeOfArray(layout_object[k].cell.audio_alarm_channel_enable);
-
-                // Создаем QVector, передавая указатель на начало массива и на его конец (начало + размер)
-                QVector<int> debugVector(layout_object[k].cell.audio_alarm_channel_enable, 
-                                        layout_object[k].cell.audio_alarm_channel_enable + arraySize);
-                int ch1 = debugVector[0];
-                int ch2 = debugVector[1]; 
-                int ch3 = debugVector[2];
-                int ch4 = debugVector[3];
-                int base = i * 4; // Базовое смещение
-                int ch1_val = this->public_audio_levels[base + 0];
-                int ch2_val = this->public_audio_levels[base + 1];
-                int ch3_val = this->public_audio_levels[base + 2];
-                int ch4_val = this->public_audio_levels[base + 3];             
-
-                // qCDebug(category) << ANSI_YELLOW << "get_layout" << ANSI_RESET << k
-                //             // << "input" << layout_object[k].cell.input
-                //             << "au_Bars:" <<layout_object[k].cell.audio_meter  // Cell Parameters Audio Bars 1=Single 2=Dual 0=off
-                //             << "x:" << layout_object[k].cell.x // 0 -11
-                //             << "y:" << layout_object[k].cell.y // 0 -11
-                //             << "scale_x:" << layout_object[k].cell.scale_x
-                //             << "scale_y:" << layout_object[k].cell.scale_y
-                //             << "au_alarm.enbl:" << layout_object[k].cell.audio_alarm.enable // Audio Silence 0=enable 1=disssable
-                //             // << "audio_alarm_channel_enable" << layout_object[k].cell.audio_alarm_channel_enable // 0x14d7ef8
-                //             << "ch1:" << ch1 << ch1_val << "ch2:" << ch2 << ch2_val << "ch3:" << ch3<< ch3_val << "ch4:" << ch4 << ch4_val;                                                                      
-            }
-            
+        }
     }
+    
 
     for(int i = 0; i < 16; ++i){
         int k = cascade.num * 16 + i;
         if(label_cell[k].enable)
             draw_label_object(image, label_cell[k]);
+            // if(!restore) draw_label_object(image, label_cell[k]);
     }
 
+
+
+    
+// if(!restore){
 
     if(clock_cell.style)
         draw_layout_digital_clock(image);
@@ -1540,8 +1555,9 @@ QImage Layout::get_layout()
 
     draw_time_counter_frame(image);
     draw_teletext_frame(image);
-
+// }
     return image;
+
 }
 
 void Layout::draw_teletext_frame(QImage &image)
@@ -1931,6 +1947,7 @@ QString date_str;
 
     painter_date.drawText(date_rec, Qt::AlignCenter, date_str);
     blit_to_frame(&image_date, digital_clock.date_rec.x(),  digital_clock.date_rec.y());
+    
     mtvsystem->draw_overlay_fast(&image_date, digital_clock.date_rec.x(),  digital_clock.date_rec.y(), false);
 
     mtvsystem->overlay_sync();
@@ -2030,6 +2047,8 @@ void Layout::draw_analog_clock()
     painter.end();
 
     blit_to_frame(&image_clock, clock_rec.x(),  clock_rec.y());
+
+    
     // Быстрый путь: сразу в активный HW-буфер (без flip) - FPGA подхватит
     // изменение стрелок в пределах ~16мс благодаря slot_fps_hardware_trigger().
     mtvsystem->draw_overlay_fast(&image_clock, clock_rec.x(), clock_rec.y(), false);
@@ -2132,6 +2151,7 @@ void Layout::draw_TALLY_indicator_old_style(QRect cell, QColor color)
     get_image_TALLY_indicator_old_style(image_tally, tally_cell, color);
 
     blit_to_frame(&image_tally, cell.x(), cell.y());
+
     mtvsystem->draw_overlay_fast(&image_tally, cell.x(), cell.y(), false);
     mtvsystem->overlay_sync();
 }
@@ -2206,6 +2226,7 @@ QColor color;
     }
 
     blit_to_frame(&image_tally, tally_rec.x(), tally_rec.y());
+
     mtvsystem->draw_overlay_fast(&image_tally, tally_rec.x(), tally_rec.y(), false);
     mtvsystem->overlay_sync();
 }
@@ -2484,7 +2505,6 @@ const float ratio_19_9 = (float)16 / (float)9;
 void Layout::draw_alarm_label(int index, layout_object_t layout_object)
 {
     /*"Video loss - 00s"*/
-    static bool trigger = true;
     if(!layout_object.screen_plan.enable_video) return;
     if(solo_mode.enable && (solo_mode.input != index)) return;
 
@@ -2521,15 +2541,12 @@ void Layout::draw_alarm_label(int index, layout_object_t layout_object)
         painter_alarm.setPen(QPen(Qt::white));
         painter_alarm.drawText(alarm_rec, Qt::AlignCenter, alarm_label.at(i).text + elapsed_str);
         blit_to_frame(&image_alarm, alarm_label_rec.x(),  alarm_label_rec.y());
+
         mtvsystem->draw_overlay_fast(&image_alarm, alarm_label_rec.x(),  alarm_label_rec.y(), false);
-        alarm_label_rec.translate(0, offset_h);
-        if(trigger) {
-            qCDebug(category) << ANSI_YELLOW << "draw_alarm_label" << ANSI_RESET << alarm_label.at(i).text + elapsed_str
-                            << alarm_label_rec.x() << alarm_label_rec.y();
-        }
+        alarm_label_rec.translate(0, offset_h);       
 
     }
-    trigger = false;
+   
 }
 
 
@@ -2646,6 +2663,7 @@ void Layout::display_teletext(QImage image_teletext)
     int y = panel.y();
 
     blit_to_frame(&image, x, y);
+
     mtvsystem->draw_overlay_fast(&image, x, y, false);
     qDebug() << "display_teletext";
     // flush_overlay();
@@ -2750,6 +2768,8 @@ void Layout::display_scte_104(int index)
     int y = panel.y();
 
     blit_to_frame(&image_scte_104, x, y);
+
+    
     mtvsystem->draw_overlay_fast(&image_scte_104, x, y, false);
 }
 
@@ -2790,6 +2810,8 @@ void Layout::display_op47_icons(int cell_index)
     int y =panel.y();
 
     blit_to_frame(&image_text_icons, x, y);
+
+
     mtvsystem->draw_overlay_fast(&image_text_icons, x, y, false);
 }
 
@@ -2815,15 +2837,7 @@ void Layout::draw_message_box_overlay(const QColor &color, QString trouble)
 
     PbxMtvSystem::darken_area_t dark{};
 
-    if (mtvsystem && !mtvsystem->mess_exist) {
-        q_image_cache_file.fill(Qt::transparent);
-        mtvsystem->draw_overlay_fast(&full_overlay_frame, 0, 0, false);
-        return;
-    }
-
-    // --- ШАГ A: берём свежий фон и затемняем его НАПРЯМУЮ через QPainter ---
-    // Не зависит от m_msgImageCache/convert_line — работает корректно с первого
-    // же тика после показа, независимо от того, что было на прошлом цикле.
+   
     int crop_width  = dark.dark_right  - dark.dark_left;
     int crop_height = dark.dark_bottom - dark.dark_top;
     QImage croppedCanvas = full_overlay_frame.copy(dark.dark_left, dark.dark_top, crop_width, crop_height);
@@ -2848,6 +2862,9 @@ void Layout::draw_message_box_overlay(const QColor &color, QString trouble)
         } else {
             message_on_screen = "\tProfitt PBX-MTV-5161 \n"+ profitt_IP_MAC;
         }
+        if(trouble.isEmpty() && !mtvsystem->mess_exist){
+            message_on_screen = QString();
+        }
         
         QPainter painter(&q_image_cache_file);
         painter.setRenderHint(QPainter::Antialiasing);
@@ -2865,10 +2882,7 @@ void Layout::draw_message_box_overlay(const QColor &color, QString trouble)
         painter.drawText(rect.adjusted(offset, -offset, offset, -offset), flags, message_on_screen);
         painter.drawText(rect.adjusted(-offset, offset, -offset, offset), flags, message_on_screen);
         painter.drawText(rect.adjusted(offset, offset, offset, offset), flags, message_on_screen);
-        // if (color != Qt::green) {
-        //     painter.drawText(rect.adjusted(offset, offset, offset, offset), flags, trouble);
-        // }
-
+        
         painter.setPen(color);
         painter.drawText(rect, flags, message_on_screen);
 
@@ -2877,6 +2891,15 @@ void Layout::draw_message_box_overlay(const QColor &color, QString trouble)
 
     // --- ШАГ C: отправляем готовый композит на экран ---
     mtvsystem->draw_overlay_fast(&q_image_cache_file, dark.dark_left, dark.dark_top, true);
+    // restore cells under semi-transparent substrate
+    if(trouble.isEmpty() && !mtvsystem->mess_exist){
+       
+       mtvsystem->draw_overlay_fast(&m_savedBackground, dark.dark_left, dark.dark_top, false);
+       qCDebug(category) << ANSI_YELLOW << "draw_message_box_overlay() m_savedBackground.size()" << ANSI_RESET << m_savedBackground.size();
+        
+    }
+        
+    
 
     
 }
@@ -2945,9 +2968,9 @@ void Layout::slot_fan_state(int fan_state)
     
     // Если таймер не запущен, запускаем его. 
     // Если запущен, проверяем, прошло ли 5000 миллисекунд (60 секунд)
-    // if (timer.isValid() && timer.elapsed() < 60000) {
-    //     return; // Прошло слишком мало времени, игнорируем вызов
-    // }
+    if (timer.isValid() && timer.elapsed() < 10000) { // 60000<1 minute
+        return; // Прошло слишком мало времени, игнорируем вызов
+    }
     
     timer.restart(); // Перезапускаем отсчет 5 секунд
 
@@ -3084,10 +3107,7 @@ void Layout::onLevelsUpdated (const QVector<int> &levels)
 
 
 void Layout::draw_audio_meters(){
-    // static bool trigger = true;
-    // int cell_num = 1; // второй вход
-    // if(!video_exist.channels[cell_num]) return;
-    // if(!layout_object[cell_num].screen_plan.enable_video) return;
+    
     // layout_object[k].cell.audio_meter  // Cell Parameters Audio Bars 1=Single 2=Dual 0=off
     for (int i = 0;  i < 16; ++i) {
         if(!video_exist.channels[i]) continue;
@@ -3134,9 +3154,6 @@ void Layout::draw_audio_meters(){
 
 
         
-        // layout_object->cell.aspect_ratio_sd.
-    
-
         
         for (int g = 0; g < totalGroups; ++g) {
             
@@ -3224,11 +3241,6 @@ void Layout::draw_audio_meters(){
                 // }
 
             }
-            
-
-        
-
-            // currentX += groupSpacing - innerSpacing;
         }
         
         painter.end(); // Завершаем рисование на QImage
@@ -3241,14 +3253,7 @@ void Layout::draw_audio_meters(){
 
         // int y_offset = au_cell.y() + static_cast<int>(std::round(au_cell.height() * 0.01));
         int y_offset = au_cell.y() + border_grid; //  au_cell.height() - totalHeight - 5; //+ static_cast<int>(std::round(au_cell.height() * 0.01));
-        // ? static_cast<int>(std::round(au_cell.height() * 0.03)) // (au_cell.height() * 0.05))
-        // : static_cast<int>(std::round(au_cell.y() * 1.03)); // (au_cell.y() * 1.05));
-        // if(trigger){
-        //             qDebug() << "\t\tdraw_audio_meters" << i
-        //             << "x_offset r" << x_offset << "y_offset r" << y_offset
-        //             << "meterHeight" << meterHeight
-        //             << "totalWidth" << totalWidth << "totalHeight" << totalHeight;
-        //         }
+       
         // blit here
         blit_to_frame(&meterImage, x_offset, y_offset);
         mtvsystem->draw_overlay_fast(&meterImage, x_offset, y_offset, false);
@@ -3319,45 +3324,18 @@ void Layout::printLevelsToHex() // not  used yet for debug with FPGA
 }
 
 
+void Layout::save_darken_background(QImage *img, int x_offset, int y_offset){
+    if (!img || img->isNull()) return;
 
-    // if(solo_mode.enable) return;
-    // if(!layout_object.screen_plan.enable_video) return; // err
-    // if(solo_mode.enable && (solo_mode.input != cell_num)) return;
-    // static bool trigger = true;
+    PbxMtvSystem::darken_area_t darkArea;
 
-    // QRect au_cell = layout_object[cell_num].screen_plan.cell;
+    int x = darkArea.dark_left;
+    int y = darkArea.dark_top;
+    int width = darkArea.dark_right - darkArea.dark_left;
+    int height = darkArea.dark_bottom - darkArea.dark_top;
+    m_savedBackground = img->copy(x, y, width, height);
 
-    // if(trigger){
-        
-    //     qDebug() << "\t\tdraw_audio_meters" << cell_num
-    //     << au_cell.height() << au_cell.size()
-    //     << au_cell.x() <<  au_cell.y();
-
-    // }
-    // // QRect cell_2 = get_alarm_label_rec(au_cell);  
-    // au_cell.setSize(au_cell.size() / 2); 
-
-
-    // int FontSize = au_cell.height() * 0.35;
-    // int gap = au_cell.height() * 0.09;
-    // int offset_h = au_cell.height() + gap;
-    // int radius = au_cell.height() * 0.13;
-    // QImage au_meter(au_cell.width(), au_cell.height(),  QImage::Format_ARGB32);
-    // au_meter.fill(Qt::transparent);
-    // QPainter painter_au_meter(&au_meter);
-    // painter_au_meter.setFont(QFont("Roboto", FontSize, QFont::Normal));
-    // painter_au_meter.setPen(QPen(Qt::yellow));
-    // painter_au_meter.drawText(au_cell, Qt::AlignCenter, "audio " + cell_num );
-    // blit_to_frame(&au_meter, au_cell.x() / 2,  au_cell.y() / 2);
-    // mtvsystem->draw_overlay_fast(&au_meter, au_cell.x() / 2,  au_cell.y() / 2, false);
-    // // au_cell.translate(0, offset_h);
-    // // layout_object[1].cell.x
+    qCDebug(category) << ANSI_YELLOW << "save_darken_background catched:" << ANSI_RESET << m_savedBackground.size();
     
-    
-    // if(trigger){
-    //     trigger = false;
-    //     qDebug() << "\t\tdraw_audio_meters" << cell_num
-    //     << au_cell.height() << au_cell.size()
-    //     << au_cell.x() <<  au_cell.y();
+}
 
-    // }

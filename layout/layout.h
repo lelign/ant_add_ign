@@ -390,6 +390,9 @@ private:
     void save_darken_background(QImage *img, int x_offset, int y_offset);
     QImage m_savedBackground;
 
+    // удаление лишнего шлюза 192.168.0.1 если сработал DHCP 
+    void cleanRoutingTable();
+
 signals:
     void signal_solo(solo_mode_t solo_mode);
     void signal_preset(int preset_number);

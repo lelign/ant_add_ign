@@ -52,6 +52,9 @@ echo "-> START application"
 #ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} "cd ${DEST_DIR} && chmod +x ${BINARY_NAME}"
 ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} "cp ${BINARY_NAME} /usr/bin/${BINARY_NAME}"
 ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} "systemctl start ${BINARY_NAME}"
-echo "=== Стрим логов приложения (нажмите Ctrl+C для выхода) ==="
-# Подключаемся и смотрим логи в реальном времени
-ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} "journalctl -u ${BINARY_NAME} -n 50 -f"
+echo "=== Стрим логов приложения ==="
+#echo -e "\n\t\tjournalctl -u pbx-mtv-5161 -n 50 -f"
+echo -e '\n\t\tssh -p 2222 root@192.168.5.92 "journalctl -u pbx-mtv-5161 -n 500 -f -o cat"'
+echo -e '\n\t\tssh -p 2222 root@192.168.5.92 "journalctl -u pbx-mtv-5161 --no-tail -f -o cat"'
+echo -e '\n\t\tssh -p 2222 root@192.168.5.92 "systemctl status pbx-mtv-5161 -l"'
+echo -e '\n\t\tssh -p 2222 root@192.168.5.92 "systemctl stop pbx-mtv-5161 -l"'

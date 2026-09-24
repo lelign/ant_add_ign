@@ -9,6 +9,8 @@
 
 #include <QVector> // for qdebug audio_alarm_channel_enable
 
+#include <QProcess> // для запуска shell команды удаления лишнего шлюза 192.168.0.1
+
 #define LAYOUT_PRESET_FILE_NAME      ("pbx-mtv-508_layout_preset")
 #define SETTINGS_SDI_INPUT_FILE_NAME ("pbx-mtv-508_sdi_input")
 #define TCP_PORT 10110
@@ -2937,6 +2939,8 @@ QString Layout::get_network_setting()
                     if (!entry.isPermanent() || network_0.ip.isEmpty()) {
                         network_0.ip   = currentIp;
                         network_0.mask = entry.netmask().toString();
+                        // удаление лишнего шлюза 192.168.0.1 если сработал DHCP
+                        cleanRoutingTable();
                     }
 
                     if (!IP_mac.isEmpty()) {
@@ -3339,3 +3343,24 @@ void Layout::save_darken_background(QImage *img, int x_offset, int y_offset){
     
 }
 
+// удаление лишнего шлюза 192.168.0.1 если сработал DHCP 
+void Layout::cleanRoutingTable()
+{
+    QProcess process;
+    
+    // Однострочный скрипт для bash:
+    // Если `ip route` содержит 'default via 192.168.222.1', то удаляем 'default via 192.168.0.1'
+    QString cmd = "ip route show default | grep -q 'via 192.168.222.1' && "
+                  "ip route show default | grep -q 'via 192.168.0.1' && "
+                  "ip route del default via 192.168.0.1";
+
+    process.start("/bin/sh", QStringList() << "-c" << cmd);
+    process.waitForFinished(5000); // Ждем максимум 5 секунд
+
+    if (process.exitCode() == 0) {
+        // Код возврата 0 будет только в том случае, если цепочка команд выполнилась и шлюз был успешно удален
+        qDebug() << "[NETWORK] The redundant gateway 192.168.0.1 was successfully removed due to activity. DHCP 192.168.222.1";
+    } else {
+        qDebug() << "[NETWORK] Route check complete (no deletion required or gateway missing)";
+    }
+}

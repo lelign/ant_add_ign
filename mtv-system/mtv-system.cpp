@@ -25,7 +25,10 @@ const char * fname = "/dev/str-mem";
 const int video_size = 12443648;
 #define OVERLAY_IOCTL_FLIP 0x40046D0E
 #define MOTION_THR (100)
-#define ANCIN ("/dev/tty10")
+
+#define ANCIN ("/dev/tsin1") // <= in 508
+// #define ANCIN ("/dev/tty10") // in 5161
+// #define ANCIN ("/home/root/scte_104") // for probe
 
 /*//enum 5161
 enum {

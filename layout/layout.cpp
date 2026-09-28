@@ -2900,6 +2900,7 @@ void Layout::draw_message_box_overlay(const QColor &color, QString trouble)
     if(trouble.isEmpty() && !mtvsystem->mess_exist){
        
        mtvsystem->draw_overlay_fast(&m_savedBackground, dark.dark_left, dark.dark_top, false);  
+       scte_104_update();
 
         if(trigger_debug) {
             trigger_debug = false;
@@ -3359,7 +3360,7 @@ void Layout::save_darken_background(QImage *img, int x_offset, int y_offset){
 void Layout::cleanRoutingTable()
 {
     QProcess process;
-    
+    static bool trigger = true;
     // Однострочный скрипт для bash:
     // Если `ip route` содержит 'default via 192.168.222.1', то удаляем 'default via 192.168.0.1'
     QString cmd = "ip route show default | grep -q 'via 192.168.222.1' && "
@@ -3369,12 +3370,16 @@ void Layout::cleanRoutingTable()
     process.start("/bin/sh", QStringList() << "-c" << cmd);
     process.waitForFinished(5000); // Ждем максимум 5 секунд
 
-    if (process.exitCode() == 0) {
+    if(trigger){
+        if (process.exitCode() == 0) {
         // Код возврата 0 будет только в том случае, если цепочка команд выполнилась и шлюз был успешно удален
         qDebug() << "[NETWORK] The redundant gateway 192.168.0.1 was successfully removed due to activity. DHCP 192.168.222.1";
     } else {
         qDebug() << "[NETWORK] Route check complete (no deletion required or gateway missing)";
     }
+    trigger = false;
+    }
+    
 }
 void Layout::mergeClockWithSavedBackground(int offset_x, int offset_y)
 {

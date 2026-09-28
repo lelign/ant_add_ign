@@ -234,21 +234,21 @@ void PbxMtv508::send_cascade_log(int category, QString str)
 /*---------------------------------------------------------------------------*/
 void PbxMtv508::slot_scte_104_data(int channel, QByteArray data)
 {
-    qDebug(category) << "\033[35m" << "\t\tslot_scte_104_data" << channel << data.size() << "\033[0m";
+   // qDebug(category).noquote() << QString("\tpbx-mtv-5161 slot_scte_104_data channel %1 data %2").arg(channel).arg(data.size());
 
     scte_104[channel]->slot_scte_104_message(data);
 }
 /*---------------------------------------------------------------------------*/
 void PbxMtv508::slot_op47_data(int channel, QByteArray data)
 {
-    qDebug(category) << "\033[35m" << "\t\t slot_op47_data channel" << channel  << data.size() << "\033[0m";
+    // qDebug(category) << "\033[35m" << "\t\t slot_op47_data channel" << channel  << data.size() << "\033[0m";
     Q_UNUSED(channel);
     teletext_decoder->add_data(data);
 }
 /*---------------------------------------------------------------------------*/
 void PbxMtv508::slot_op42_data(int channel, QByteArray data)
 {
-    qDebug(category) << "\033[35m" << "\t\t slot_op42_data channel" << channel  << data.size() << "\033[0m";
+    // qDebug(category) << "\033[35m" << "\t\t slot_op42_data channel" << channel  << data.size() << "\033[0m";
     Q_UNUSED(channel);
     teletext_decoder->add_data_op42(data);
 }

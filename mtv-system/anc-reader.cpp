@@ -15,23 +15,23 @@
 
 static QLoggingCategory category("ANC");
 
-AncReader::AncReader(const char * in_fname, QObject *parent)
+AncReader::AncReader(const char * in_fname, QObject *parent) // in_fname <= #define ANCIN ("/dev/tsin1") // <= in 508 call from mtv-system
 :
         QThread(parent),
         thread_exit(0),
         readout_cnt(READOUT_CNT),
-        ts_reader(new TsInReader(in_fname))
+        ts_reader(new TsInReader(in_fname))      
 {
         ts_reader->start();
 }
 
 void AncReader::run()
-{
+{      
         data_t data;
 
         while(thread_exit==0){
-                data = ts_reader->get_data();
-                if(data.size>0){
+                data = ts_reader->get_data();                
+                if(data.size>0){                        
                         process(data);
                         ts_reader->return_data(data);
                 }
@@ -62,21 +62,28 @@ void AncReader::process(data_t data)
         did = data.buf[1];
         sdid = data.buf[2];
         size = data.buf[3];
-
+        
         if(channel < 16){
                 if(size != data.size-1-4){
-                        //qCDebug(category) << "Incorrect ANC size"; // ign
+                        // qDebug(category) << QString("Incorrect ANC size channel %1 did %2 sdid %3 size %4 ").arg(channel)
+                        // .arg(did).arg(sdid).arg(size); // ign
                         return;
                 }                
                 if(did==S2010_DID && sdid==S2010_SDID){
                         QByteArray ret = QByteArray(data.buf+1, data.size-1);
                         emit scte_104_data(channel, ret);
+                        // qDebug(category) << QString("SCTE 104 channel %1 did %2 sdid %3 size %4 ").arg(channel)
+                        // .arg(did).arg(sdid).arg(size); // ign
                 } else if(did==OP47_DID && sdid==OP47_SDID){
-                        QByteArray ret = QByteArray(data.buf+1, data.size-1);
+                        QByteArray ret = QByteArray(data.buf+1, data.size-1); // отрезает байт канала и передает массив, начиная с DID
                         emit op47_data(channel, ret);
+                        // qDebug(category) << QString("OP 47 channel %1 did %2 sdid %3 size %4 ").arg(channel)
+                        // .arg(did).arg(sdid).arg(size); // ign
                 }
         }else{
                 QByteArray ret = QByteArray(data.buf+1, data.size-1);
                 emit op42_data(0, ret);
+                // qDebug(category) << QString("OP 42 channel %1 did %2 sdid %3 size %4 ").arg(channel)
+                        // .arg(did).arg(sdid).arg(size); // ign
         }
 }

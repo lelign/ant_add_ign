@@ -1,0 +1,33 @@
+compilation
+. /opt/poky/5.2.4/environment-setup-cortexa9t2hf-neon-poky-linux-gnueabi
+mkdir -p build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make
+
+scp -P 2222 scte_file_gen root@192.168.5.91:/home/root/
+scp -P 2222 scte_tty_gen root@192.168.5.91:/home/root/
+
+
+
+via tty
+root@arria10:~# ls /dev/tsin1
+ls: /dev/tsin1: No such file or directory
+root@arria10:~# mkfifo /dev/tsin1
+root@arria10:~# chmod 666 /dev/tsin1
+root@arria10:~# ls /dev/tsin1
+/dev/tsin1
+root@arria10:~# ls /dev/tsin1 -l
+prw-rw-rw-    1 root     root             0 Sep 27 10:18 /dev/tsin1
+
+
+root@arria10:~# ./scte_tty_gen
+Отправка SCTE-104 в /dev/tsin1...
+Успешно отправлено 24 байт.
+HEX: FF FF 01 00 00 12 01 00 01 01 01 00 0B 01 00 00 03 09 00 00 05 00 00 00 
+
+AncReader ожидает данные в формате пакета ANC, 
+где первые 4 байта — это заголовок: [Channel, DID, SDID, Size].
+
+убраны все специфичные для COM-порта настройки termios, 
+добавлен необходимый 4-байтовый ANC-заголовок (channel, did, sdid, size) и 
+добавлен стартовый цикл для пробития защитного фильтра readout_cnt в 256 пакетов.

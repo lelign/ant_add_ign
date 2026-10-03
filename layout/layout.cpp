@@ -2735,7 +2735,7 @@ void Layout::scte_104_update()
     }
 }
 
-void Layout::display_scte_104(int index)
+void Layout::display_scte_104(int index) // draw scte
 {
     int k = cascade.num * 16 + index;
 
@@ -2746,6 +2746,8 @@ void Layout::display_scte_104(int index)
     QString text_in  = scte_104_splice[index].in;
     QString text_out = scte_104_splice[index].out;
     QRect panel = layout_object[k].screen_plan.panel_scte_104;
+
+    QRect cell_with_scte = layout_object[k].screen_plan.cell; // get cell parameters
 
     QImage image_scte_104(panel.width(), panel.height(), QImage::Format_ARGB32);
     image_scte_104.fill(QColor(80, 80, 80, 200));
@@ -2762,12 +2764,19 @@ void Layout::display_scte_104(int index)
     painter.setBrush(Qt::black);
     QRect rec = QRect(6, 0, panel.width(), panel.height());
 
+    
+
     painter.setPen(QPen(Qt::white));
     painter.drawText(rec, Qt::AlignLeft|Qt::AlignVCenter, s);
 
     painter.end();
 
     int x = panel.x();
+    qDebug().noquote()<< "\t\t\t panel.width() for channel" << cell_with_scte.width() << k;
+    if(cell_with_scte.width() > 960){  // сдвигаем иконку scte вправо для широких ячеек
+        x = panel.x() + 30;
+        qDebug().noquote()<< "\t\t\tadded 40 for channel" << k;
+    }
     int y = panel.y();
 
     blit_to_frame(&image_scte_104, x, y);

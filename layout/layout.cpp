@@ -2990,7 +2990,7 @@ void Layout::slot_fan_state(int fan_state)
     
     // Если таймер не запущен, запускаем его. 
     // Если запущен, проверяем, прошло ли 5000 миллисекунд (60 секунд)
-    if (timer.isValid() && timer.elapsed() < 10000) { // 60000<1 minute
+    if (timer.isValid() && timer.elapsed() < 120000) { // 60000<1 minute
         return; // Прошло слишком мало времени, игнорируем вызов
     }
     

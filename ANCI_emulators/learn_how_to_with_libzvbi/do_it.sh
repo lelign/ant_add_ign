@@ -7,6 +7,7 @@ BOARD_USER="root"
 BINARY_NAME_1="injector_with_scan"
 BINARY_NAME_2="libzvbi_decoder"
 BINARY_NAME_3="libzvbi_injector"
+BINARY_NAME_4="libzvbi_sandbox"
 DEST_DIR="/home/root"
 USRBIN_DIR="/home/root"
 
@@ -46,9 +47,9 @@ echo "=== SUCCSESS -> DEPLOY... ==="
 #ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} "systemctl stop $BINARY_NAME"
 
 # 6. Копируем новый бинарник на плату
-echo "-> scp -P $BOARD_PORT $BINARY_NAME_1 $BINARY_NAME_2 $BINARY_NAME_3 $BOARD_USER@$BOARD_IP:$DEST_DIR"
+echo "-> scp -P $BOARD_PORT $BINARY_NAME_1 $BINARY_NAME_2 $BINARY_NAME_3 $BINARY_NAME_4 $BOARD_USER@$BOARD_IP:$DEST_DIR"
 #ls "${BINARY_NAME_1, BINARY_NAME_2, BINARY_NAME_3}"
-scp -P ${BOARD_PORT} $BINARY_NAME_1 $BINARY_NAME_2 $BINARY_NAME_3 ${BOARD_USER}@${BOARD_IP}:${DEST_DIR}/
+scp -P ${BOARD_PORT} $BINARY_NAME_1 $BINARY_NAME_2 $BINARY_NAME_3 $BINARY_NAME_4 ${BOARD_USER}@${BOARD_IP}:${DEST_DIR}/
 
 # 7. Запускаем приложение на плате
 #echo "-> START application"
@@ -56,6 +57,8 @@ scp -P ${BOARD_PORT} $BINARY_NAME_1 $BINARY_NAME_2 $BINARY_NAME_3 ${BOARD_USER}@
 #ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} "cp ${BINARY_NAME} /usr/bin/${BINARY_NAME}"
 #ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} "systemctl start ${BINARY_NAME}"
 echo "=== SUCCESS ==="
+ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} rm -f sandbox_page*
+ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} ./$BINARY_NAME_4
 #echo -e "\n\t\tjournalctl -u pbx-mtv-5161 -n 50 -f"
 #echo -e '\n\t\tssh -p 2222 root@192.168.5.92 "journalctl -u pbx-mtv-5161 -n 500 -f -o cat"'
 #echo -e '\n\t\tssh -p 2222 root@192.168.5.92 "journalctl -u pbx-mtv-5161 --no-tail -f -o cat"'

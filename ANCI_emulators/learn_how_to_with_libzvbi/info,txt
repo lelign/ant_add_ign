@@ -1,18 +1,25 @@
-сборка
+Сначала
 . /opt/poky/5.2.4/environment-setup-cortexa9t2hf-neon-poky-linux-gnueabi
-mkdir -p build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
-make
-
-scp -P 2222 scte_file_gen root@192.168.5.91:/home/root/
-scp -P 2222 scte_tty_gen root@192.168.5.91:/home/root/
+export VNP_IP="192.168.5.87"
 
 
-root@arria10:~# ls /dev/tsin1
-ls: /dev/tsin1: No such file or directory
-root@arria10:~# mkfifo /dev/tsin1
-root@arria10:~# chmod 666 /dev/tsin1
-root@arria10:~# ls /dev/tsin1 -l
-prw-rw-rw-    1 root     root             0 Sep 27 10:18 /dev/tsin1
+libzvbi_sandbox.cpp для проверки работоспособности libzvbi 
+    гененрирует файл sandbox_page_770.png при помощи libzvbi
+    пять строк текста на красном фоне
+
+decoder.cpp + injector.cpp
+    Сначала запустить ./libzvbi_decoder
+    затем, в другом терминале ./libzvbi_injector
+    libzvbi_decoder сгенерирует файл page_770.png (одна строка заголовок на черном фоне, как в 508)
+    из последовательности ОР-47, переданной от  ./libzvbi_injector чрез UDP-socket (port 5555)
+
+
+в /working_binary собранные бинарники первого варианта 
+libzvbi_decoder и libzvbi_injector, исходники утрачены 
+работоспособны
+
+сборка
+./do_it.sh
+
 
 

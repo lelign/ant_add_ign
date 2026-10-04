@@ -1,27 +1,28 @@
-compilation
+Сначала
 . /opt/poky/5.2.4/environment-setup-cortexa9t2hf-neon-poky-linux-gnueabi
 export VNP_IP="192.168.5.87"
-mkdir -p build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
-make
 
-scp -P 2222 scte_file_gen root@192.168.5.91:/home/root/
-scp -P 2222 scte_tty_gen root@192.168.5.91:/home/root/
+сборка
+    ./do_it.sh
 
+scte_tty_gen в цикле с лагом 15 сек. генерирует scte-104 метки (вход-выход в/из рекламы)
+для 16 входов pbx-mtv-5161, оригинальные значения для каждого канала
 
-
-via tty
-root@arria10:~# ls /dev/tsin1
-ls: /dev/tsin1: No such file or directory
-root@arria10:~# mkfifo /dev/tsin1
-root@arria10:~# chmod 666 /dev/tsin1
-root@arria10:~# ls /dev/tsin1
-/dev/tsin1
-root@arria10:~# ls /dev/tsin1 -l
-prw-rw-rw-    1 root     root             0 Sep 27 10:18 /dev/tsin1
+проверка наличия /dev/tsin1
+    root@arria10:~# ls /dev/tsin1
+    ls: /dev/tsin1: No such file or directory
+    root@arria10:~# mkfifo /dev/tsin1
+    root@arria10:~# chmod 666 /dev/tsin1
+    root@arria10:~# ls /dev/tsin1
+    /dev/tsin1
+    root@arria10:~# ls /dev/tsin1 -l
+    prw-rw-rw-    1 root     root             0 Sep 27 10:18 /dev/tsin1
 
 
-root@arria10:~# ./scte_tty_gen
+запуск
+    root@arria10:~# ./scte_tty_gen
+
+
 Отправка SCTE-104 в /dev/tsin1...
 Успешно отправлено 24 байт.
 HEX: FF FF 01 00 00 12 01 00 01 01 01 00 0B 01 00 00 03 09 00 00 05 00 00 00 

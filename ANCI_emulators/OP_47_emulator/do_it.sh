@@ -53,6 +53,7 @@ scp -P ${BOARD_PORT} $BINARY_NAME_1 ${BOARD_USER}@${BOARD_IP}:${DEST_DIR}/
 #ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} "cd ${DEST_DIR} && chmod +x ${BINARY_NAME}"
 #ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} "cp ${BINARY_NAME} /usr/bin/${BINARY_NAME}"
 #ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} "systemctl start ${BINARY_NAME}"
+ssh -p ${BOARD_PORT} ${BOARD_USER}@${BOARD_IP} ./$BINARY_NAME_1
 echo "=== SUCCESS ==="
 #echo -e "\n\t\tjournalctl -u pbx-mtv-5161 -n 50 -f"
 #echo -e '\n\t\tssh -p 2222 root@192.168.5.92 "journalctl -u pbx-mtv-5161 -n 500 -f -o cat"'

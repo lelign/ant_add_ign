@@ -1,0 +1,13 @@
+работоспособные бинарники, исходники утрачены
+Запуск:
+    на первом терминале запускаем ./libzvbi_decoder
+    на втором терминале запускаем ./libzvbi_injector
+
+Результат:
+    в директории, из которой был запущен ./libzvbi_decoder
+    появляются файлы, как результат работы libxvbi.so:
+    ls -l | grep page
+        -rw-r--r--    1 root     root        492000 Oct  4 10:39 page_000_800.bin
+        -rw-r--r--    1 root     root          1503 Oct  4 10:39 page_000_800.png
+        -rw-r--r--    1 root     root        492000 Oct  4 10:39 page_001_800.bin
+        -rw-r--r--    1 root     root          1503 Oct  4 10:39 page_001_800.png

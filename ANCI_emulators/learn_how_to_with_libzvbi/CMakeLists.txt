@@ -11,9 +11,11 @@ find_package(Threads REQUIRED)
 # 2. Объявление исполняемых файлов
 add_executable(libzvbi_injector injector.cpp)
 add_executable(libzvbi_decoder decoder.cpp)
+add_executable(injector_with_scan injector_with_scan.cpp)
 
 # 3. Линковка для libxvbi_injector
 target_link_libraries(libzvbi_injector PRIVATE Threads::Threads)
+target_link_libraries(injector_with_scan PRIVATE Threads::Threads)
 
 # 4. Линковка для libzvbi_decoder (ДОБАВЛЯЕМ СЮДА Qt5::Core)
 target_link_libraries(libzvbi_decoder PRIVATE zvbi)
@@ -21,4 +23,5 @@ target_link_libraries(libzvbi_decoder PRIVATE zvbi)
 # Вывод информации о сборке
 message(STATUS "Конфигурация инжектора OP-47 завершена. Целевой стандарт: C++${CMAKE_CXX_STANDARD}")
 message(STATUS "Конфигурация декодера OP-47 завершена. Целевой стандарт: C++${CMAKE_CXX_STANDARD}")
+message(STATUS "Конфигурация injector_with_scan OP-47 завершена. Целевой стандарт: C++${CMAKE_CXX_STANDARD}")
 

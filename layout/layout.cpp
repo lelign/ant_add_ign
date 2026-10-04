@@ -2654,6 +2654,7 @@ void Layout::clean_teletext_image(int channel)
 
 void Layout::display_teletext(QImage image_teletext)
 {
+    static bool trigger = true;
     if(!teletext_cell.enable) return;
 
     if(solo_mode.enable && (solo_mode.input != 0)) return;
@@ -2668,7 +2669,10 @@ void Layout::display_teletext(QImage image_teletext)
     blit_to_frame(&image, x, y);
 
     mtvsystem->draw_overlay_fast(&image, x, y, false);
-    qDebug() << "display_teletext";
+    if(trigger){
+        trigger = false;
+        qDebug(category).noquote() << "\t\tlayout display_teletext x y" << x << y;
+    }
     // flush_overlay();
     // mtvsystem->overlay_sync();
 }
@@ -2788,6 +2792,7 @@ void Layout::display_scte_104(int index) // draw scte
 
 void Layout::display_text_icons(QImage &image, QRect panel, int cell_index)
 {
+    static bool trigger = true;
     int k = cascade.num * 16 + cell_index;
     if(!layout_object[k].screen_plan.enable_video) return;
 
@@ -2796,6 +2801,10 @@ void Layout::display_text_icons(QImage &image, QRect panel, int cell_index)
     if(op47[cell_index] && layout_object[k].cell.teletext_icon_display)
         draw_text_icon(image, panel, "TXT");
 
+        if(trigger){
+        trigger = false;
+        qDebug(category).noquote() << "\t\tlayout display_text_icons cell_index" << cell_index;
+    }
     /*  Как добавлять новые иконки
         QRect rec = layout_object.screen_plan.panel_text_icons;
         int offset;

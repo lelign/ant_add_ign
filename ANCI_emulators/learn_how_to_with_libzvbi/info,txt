@@ -1,0 +1,18 @@
+сборка
+. /opt/poky/5.2.4/environment-setup-cortexa9t2hf-neon-poky-linux-gnueabi
+mkdir -p build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make
+
+scp -P 2222 scte_file_gen root@192.168.5.91:/home/root/
+scp -P 2222 scte_tty_gen root@192.168.5.91:/home/root/
+
+
+root@arria10:~# ls /dev/tsin1
+ls: /dev/tsin1: No such file or directory
+root@arria10:~# mkfifo /dev/tsin1
+root@arria10:~# chmod 666 /dev/tsin1
+root@arria10:~# ls /dev/tsin1 -l
+prw-rw-rw-    1 root     root             0 Sep 27 10:18 /dev/tsin1
+
+

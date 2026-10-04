@@ -4,7 +4,7 @@
 BOARD_IP=$VNP_IP
 BOARD_PORT="2222"
 BOARD_USER="root"
-BINARY_NAME_1="OP_47_emulator_r"
+BINARY_NAME_1="OP_47_emulator"
 DEST_DIR="/home/root"
 USRBIN_DIR="/home/root"
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Настройки подключения к плате
-BOARD_IP="192.168.5.87"
+BOARD_IP=$VNP_IP
 BOARD_PORT="2222"
 BOARD_USER="root"
 BINARY_NAME_1="injector_with_scan"

@@ -1,0 +1,3 @@
+Сначала
+. /opt/poky/5.2.4/environment-setup-cortexa9t2hf-neon-poky-linux-gnueabi
+export VNP_IP="192.168.5.87" (board ip)

@@ -2070,6 +2070,7 @@ void Layout::draw_frame(QImage &image, QColor color, QRect boundary, int width)
 
     painter.drawRect(boundary);
     painter.end();
+    // qDebug().noquote() << "\t\tlayoutdraw_frame width" << width;
 }
 
 void Layout::DisplayTALLY(int addr, int tally)
@@ -2654,10 +2655,18 @@ void Layout::clean_teletext_image(int channel)
 
 void Layout::display_teletext(QImage image_teletext)
 {
-    static bool trigger = true;
+    // static bool trigger = true;
+    static QElapsedTimer timer;
     if(!teletext_cell.enable) return;
 
     if(solo_mode.enable && (solo_mode.input != 0)) return;
+    // рисуем телетекст не чаще чем раз в секунду
+    // Если запущен, проверяем, прошло ли 1000 миллисекунд (1 секунда)
+    if (timer.isValid() && timer.elapsed() < 1000) { 
+        return; // Прошло слишком мало времени, игнорируем вызов
+    }
+    
+    timer.restart(); // Перезапускаем отсчет 5 секунд
 
     QRect panel = teletext_cell.panel_teletext;
 
@@ -2669,10 +2678,10 @@ void Layout::display_teletext(QImage image_teletext)
     blit_to_frame(&image, x, y);
 
     mtvsystem->draw_overlay_fast(&image, x, y, false);
-    if(trigger){
-        trigger = false;
-        qDebug(category).noquote() << "\t\tlayout display_teletext x y" << x << y;
-    }
+    // if(trigger){
+    //     trigger = false;
+    //     // qDebug(category).noquote() << "\t\tlayout display_teletext x y" << x << y;
+    // }
     // flush_overlay();
     // mtvsystem->overlay_sync();
 }
@@ -3142,58 +3151,57 @@ void Layout::onLevelsUpdated (const QVector<int> &levels)
 
 
 void Layout::draw_audio_meters(){
-    
-    // layout_object[k].cell.audio_meter  // Cell Parameters Audio Bars 1=Single 2=Dual 0=off
+    static bool trigger = true;
     for (int i = 0;  i < 16; ++i) {
         if(!video_exist.channels[i]) continue;
         if(!layout_object[i].screen_plan.enable_video) continue;
         if(layout_object[i].cell.audio_meter == 0) continue;
+        // if (i == 0 && Layout::op47[i] == 1) continue; // может вообще отключать градусники при телетексте?
         QRect au_cell = layout_object[i].screen_plan.cell; // get cell parameters
-
+        
         // ---- 2. Высчитываем размеры общего холста для аудиометра ----
         int totalGroups = 16;
         int channelsPerGroup = 4;
         int border_grid = 4;
-        
-        int meterWidth = static_cast<int>(std::round(au_cell.width() * 0.01));// 1%// 4; //au_cell.width() % 10; //4;     // Ширина полоски
-        
-        // int meterHeight = static_cast<int>(std::round(au_cell.height() * 0.9));
-        int meterHeight = au_cell.height() - border_grid *2;
-        // (au_cell.height() * 9) / 10 - ((au_cell.height() * 9) / 10) % 2;  // 200;  // Высота полоски
+
+        int meterWidth = static_cast<int>(std::round(au_cell.width() * 0.01)); // 1%
+        int meterHeight = au_cell.height() - border_grid * 2;
+
         int innerSpacing = 2;   // Зазор внутри группы
-        // int groupSpacing = 2;  // Зазор между группами
         int padding = 2;       // Внутренние поля рамки
-
-        // Считаем полную ширину и высоту результирующей картинки
-        int groupWidth = (meterWidth * channelsPerGroup) + (innerSpacing * (channelsPerGroup - 1));
-        int totalWidth = groupWidth + padding; //  + groupSpacing
-        // int totalHeight = static_cast<int>(std::round(au_cell.height() * 0.9));
-        // meterHeight
-        // static_cast<int>(std::round(au_cell.height() * 0.05))// + 60; // Место под полоски + рамки + текст снизу
-
-        // ---- 3. Создаем временный QImage и отрисовываем всю графику ----
-        // Используем Format_ARGB32 для поддержки прозрачности (альфа-канала)
-        QImage meterImage(totalWidth, meterHeight, QImage::Format_ARGB32);
-        meterImage.fill(Qt::transparent); // Заполняем прозрачностью
-
-        QPainter painter(&meterImage);
-        painter.setRenderHint(QPainter::Antialiasing);
 
         int currentX = padding;
         int startY = padding;
+
+
+        if (i == 0 && Layout::op47[i] == 1) { // Для телетекста на 1-м входе уменьшаем высоту градусника на 30%
+            
+            meterHeight = static_cast<int>(std::round(meterHeight * 0.7));
+
+            startY = padding + static_cast<int>(std::round(au_cell.height() * 0.3)); 
+            // return;
+            
+            // qDebug().noquote() << "\t\t\tdecrease meters startY meterHeight" << startY << meterHeight;
+        }
+
+        // ширина результирующей картинки
+        int groupWidth = (meterWidth * channelsPerGroup) + (innerSpacing * (channelsPerGroup - 1));
+        int totalWidth = groupWidth + padding; 
+
+        // временный QImage и отрисовываем всю графику ----
+        QImage meterImage(totalWidth, meterHeight, QImage::Format_ARGB32);
+        meterImage.fill(Qt::transparent); 
+
+        QPainter painter(&meterImage);
+        painter.setRenderHint(QPainter::Antialiasing);
 
         const double interpFactor = 0.3; // Коэффициент плавности: 0.1 - очень плавно/инертно, 0.3 - быстрее/динамичнее
         // Настройки баллистики пика:
         const int HOLD_TICKS = 9;        // Сколько кадров пик стоит на месте (~500 мс при таймере 56мс)
         const double PEAK_DROP_SPEED = 1.5; // Скорость падения пика (сколько процентов высоты теряется за кадр)
 
-
-        
-        
         for (int g = 0; g < totalGroups; ++g) {
-            
-            
-            
+                        
             // Рисуем 4 канала внутри этой группы
             if( g == i) {
                 // Рисуем подложку-рамку для группы
@@ -3292,7 +3300,7 @@ void Layout::draw_audio_meters(){
         // blit here
         blit_to_frame(&meterImage, x_offset, y_offset);
         mtvsystem->draw_overlay_fast(&meterImage, x_offset, y_offset, false);
-        trigger = false;
+        // trigger = false;
 
     }
 }

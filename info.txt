@@ -1,3 +1,10 @@
 Сначала
+pwd
+    /home/iru/ProjectsSDK/ant_add_ign
+
 . /opt/poky/5.2.4/environment-setup-cortexa9t2hf-neon-poky-linux-gnueabi
 export VNP_IP="192.168.5.87" (board ip)
+
+сборка
+    ./do_it.sh
+
